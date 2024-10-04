@@ -1,26 +1,3 @@
-#### Source code for simulation of survival data
-
-# Libraries
-library(gridExtra)
-library(tidyverse)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # Simulation based on Eiermacher paper
 # 1. The Weibull hazard function as a function of total time
 

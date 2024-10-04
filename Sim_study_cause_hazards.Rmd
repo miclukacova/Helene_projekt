@@ -6,7 +6,9 @@ date: "2024-10-04"
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-source("~/Helene_projekt/source_code_surv_sim.R")
+# Libraries
+library(gridExtra)
+library(tidyverse)
 ```
 
 
