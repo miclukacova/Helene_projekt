@@ -10,34 +10,54 @@ source("~/Helene_projekt/source_code_surv_sim.R")
 ```
 
 
-# Reproduktion af Helenes gamle beregner noter
+# Generalisering af Helenes gamle beregner noter
+
+Simulation af kovariater til tid 0:
 
 ```{r}
-# Covariate indicating treatment
-X <- rbinom(n, 1, 0.1627)
+n <- 1700
 
-# Treatment effect 
-beta <- 0.7816
+X0 <- rbinom(n, 1, 0.1627)
+X1 <- rpois(n, 35)
+L0 <- cbind(X0, X1)
 
-# Hazard functions of cause 1 and cause 2
-weib_haz <- function(t, lambda, v) lambda * v * (v * t) ^ (v - 1)
-weib_cum_haz <- function(t, lambda, v) lambda * (v * t) ^ v 
+# Effekt
+alpha <- c(0, 0)
+beta <- c(0.7816, -0.1)
+```
 
-haz1 <- function(t, lambda, v) weib_haz(t, lambda, v ) 
-haz2 <- function(t, lambda, v) weib_haz(t, lambda, v) * exp(beta * x)
+Hazard functions
 
+```{r}
+# Parameters
+lambda <- 0.0271
+v <- 1.3841
+
+# Specify hazard functions
+weib_haz <- function(t) lambda * v * (v * t) ^ (v - 1)
+weib_cum_haz <- function(t) lambda * (v * t) ^ v 
+
+# Cause specific hazard functions
+haz1 <- function(t) weib_haz(t) * exp(t(alpha) %*% x)
+haz2 <- function(t) weib_haz(t) * exp(t(beta) %*% x)
+```
+
+Distribution function and inverse distribution function
+
+```{r}
 # CDF of time to any event T
-F_func <- function(t, lambda, v, x, beta) exp( - (weib_cum_haz(t, lambda, v) + 
-                                                    weib_cum_haz(t, lambda, v) * exp(beta * x))) 
+F_func <- function(t, x) {
+  1 - exp( - (weib_cum_haz(t) * exp(t(alpha) %*% x) + 
+            weib_cum_haz(t) * exp(t(beta) %*% x)))
+}
 
 # Inverse of the distribution function
 
-inverse_F <- function(p, lambda, v, x, beta, lower_bound = 0, upper_bound = 100) {
+inverse_F <- function(p, x, lower_bound = 0, upper_bound = 100) {
   # Define the root-finding function (F(t) - p)
   root_function <- function(t) {
-    F_func(t, lambda, v, x, beta) - p
+    F_func(t, x) - p
   }
-  
   # Use uniroot to find the value of t such that F(t) = y
   result <- uniroot(root_function, lower = lower_bound, upper = upper_bound)
   
@@ -46,19 +66,26 @@ inverse_F <- function(p, lambda, v, x, beta, lower_bound = 0, upper_bound = 100)
 }
 ```
 
-
+Simulating time to event variables
 
 ```{r}
 # Simulating uniform random variables
 Z <- runif(n)
 # Simulating event times
-Ts <-  mapply(function(z, x) inverse_F(p = z, x = x, lambda = lambda, v = v, beta = beta), Z, X)
+Ts <-  numeric(n)
+for(i in 1:n){
+  Ts[i] <- inverse_F(p = Z[i], x = L0[i,])
+}
 
 # Simulating censoring
 censoring_time<- rweibull(n, 1.3841, 1/0.0271)
 # The event variable
 event <- ifelse(Ts <= censoring_time, 1, 0)
+```
 
+Simulating the cause
+
+```{r}
 # The probability of event being type 1
 p1 <- 1 / (1 + exp(beta * X))
 event_type <- ifelse(event == 1, rbinom(n, 1, p1), NA) # 1 indicates the event being of type 1, 0 indicating event of type 2
@@ -68,6 +95,7 @@ T1 <- ifelse(event_type == 1, Ts, 0)
 T2 <- ifelse(event_type == 0, Ts, 0)
 ```
 
+Plots of distribution of evnt times
 
 ```{r}
 p1 <- ggplot(data = data.frame(T1 = T1), aes(x = T1, y = ..density..)) + 
@@ -75,7 +103,7 @@ p1 <- ggplot(data = data.frame(T1 = T1), aes(x = T1, y = ..density..)) +
   theme_minimal()+
   labs(title = "Cause 1")
 
-p2 <- ggplot(data = data.frame(T2 = T2), aes(x = T2..density..)) + 
+p2 <- ggplot(data = data.frame(T2 = T2), aes(x = T2, y = ..density..)) + 
   geom_histogram(binwidth = 1, fill = "blue", alpha = 0.5) + 
   theme_minimal()+
   labs(title = "Cause 2")
@@ -84,7 +112,6 @@ grid.arrange(p1, p2, ncol = 2)
 ```
 
 
-# Ny simulation
 
 
 
