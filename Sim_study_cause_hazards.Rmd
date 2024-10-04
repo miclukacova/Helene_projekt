@@ -1,0 +1,131 @@
+---
+title: 'Simulation study: Cause Specific Hazards'
+output: html_document
+date: "2024-10-04"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(gridExtra)
+library(tidyverse)
+```
+
+
+# Simulation based on Eiermacher paper
+
+```{r}
+# 1. The Weibull hazard function as a function of total time
+
+hazard <- function(t, lambda = 2, v = 0.5) lambda * v * t ^ (v - 1)
+cum_hazard <- function(t, lambda = 2, v = 0.5) lambda * t ^ (v)
+cum_hazard_inv <- function(t, lambda = 2, v = 0.5) (t / lambda) ^ (1 / v)
+
+# 2. Derive the cumulative hazard function for interevent time
+
+haz_tilde <- function(u, t, lambda = 2, v = 0.5) {
+  lambda * ((t + u) ^ v - t ^ v)
+}
+
+haz_tilde_inv <- function(u, t, lambda = 2, v = 0.5) {
+  ((u + lambda * t ^ v) / lambda) ^ (1 / v) - t
+}
+
+# 3. Simulate independent random numbers a_i following a uniform distribution 
+n <- 100
+set.seed(98)
+as <- runif(n)
+
+# 4. Apply the recursive algorithm
+ts <- numeric(n)
+# i = 1:
+ts[1] <- cum_hazard_inv( - log(as[1]))
+
+for(i in 1 : (n - 1)){
+  ts[i + 1] <- ts[i] + haz_tilde_inv( u = - log(as[i + 1]), t = ts[i])
+}
+
+```
+
+
+# Reproduktion af Helenes gamle beregner noter
+
+```{r}
+# parameters
+lambda <- 0.0271
+v <- 1.3841
+
+# Number of individuals
+n <- 1715
+
+# Covariate indicating treatment
+X <- rbinom(n, 1, 0.1627)
+
+# Treatment effect 
+beta <- 0.7816
+
+# Hazard functions of cause 1 and cause 2
+
+weib_haz <- function(t, lambda, v) lambda * v * (v * t) ^ (v - 1)
+weib_cum_haz <- function(t, lambda, v) lambda * (v * t) ^ v 
+
+haz1 <- function(t, lambda, v) weib_haz(t, lambda, v ) 
+haz2 <- function(t, lambda, v) weib_haz(t, lambda, v) * exp(beta * x)
+
+# CDF of time to any event T
+F_func <- function(t, lambda, v, x, beta) exp( - (weib_cum_haz(t, lambda, v) + 
+                                                    weib_cum_haz(t, lambda, v) * exp(beta * x))) 
+
+# Inverse of the distribution function
+
+inverse_F <- function(p, lambda, v, x, beta, lower_bound = 0, upper_bound = 100) {
+  # Define the root-finding function (F(t) - p)
+  root_function <- function(t) {
+    F_func(t, lambda, v, x, beta) - p
+  }
+  
+  # Use uniroot to find the value of t such that F(t) = y
+  result <- uniroot(root_function, lower = lower_bound, upper = upper_bound)
+  
+  # Return the value of t
+  return(result$root)
+}
+```
+
+
+
+```{r}
+# Simulating uniform random variables
+Z <- runif(n)
+# Simulating event times
+Ts <-  mapply(function(z, x) inverse_F(p = z, x = x, lambda = lambda, v = v, beta = beta), Z, X)
+
+# Simulating censoring
+censoring_time<- rweibull(n, 1.3841, 1/0.0271)
+# The event variable
+event <- ifelse(Ts <= censoring_time, 1, 0)
+
+# The probability of event being type 1
+p1 <- 1 / (1 + exp(beta * X))
+event_type <- ifelse(event == 1, rbinom(n, 1, p1), NA) # 1 indicates the event being of type 1, 0 indicating event of type 2
+
+# Cause specific event times
+T1 <- ifelse(event_type == 1, Ts, 0) 
+T2 <- ifelse(event_type == 0, Ts, 0)
+```
+
+
+```{r}
+p1 <- ggplot(data = data.frame(T1 = T1), aes(x = T1, y = ..density..)) + 
+  geom_histogram(binwidth = 1, fill = "blue", alpha = 0.5) + 
+  theme_minimal()+
+  labs(title = "Cause 1")
+
+p2 <- ggplot(data = data.frame(T2 = T2), aes(x = T2..density..)) + 
+  geom_histogram(binwidth = 1, fill = "blue", alpha = 0.5) + 
+  theme_minimal()+
+  labs(title = "Cause 2")
+
+grid.arrange(p1, p2, ncol = 2)
+```
+
+
