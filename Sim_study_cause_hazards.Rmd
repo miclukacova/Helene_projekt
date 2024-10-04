@@ -6,57 +6,13 @@ date: "2024-10-04"
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-library(gridExtra)
-library(tidyverse)
-```
-
-
-# Simulation based on Eiermacher paper
-
-```{r}
-# 1. The Weibull hazard function as a function of total time
-
-hazard <- function(t, lambda = 2, v = 0.5) lambda * v * t ^ (v - 1)
-cum_hazard <- function(t, lambda = 2, v = 0.5) lambda * t ^ (v)
-cum_hazard_inv <- function(t, lambda = 2, v = 0.5) (t / lambda) ^ (1 / v)
-
-# 2. Derive the cumulative hazard function for interevent time
-
-haz_tilde <- function(u, t, lambda = 2, v = 0.5) {
-  lambda * ((t + u) ^ v - t ^ v)
-}
-
-haz_tilde_inv <- function(u, t, lambda = 2, v = 0.5) {
-  ((u + lambda * t ^ v) / lambda) ^ (1 / v) - t
-}
-
-# 3. Simulate independent random numbers a_i following a uniform distribution 
-n <- 100
-set.seed(98)
-as <- runif(n)
-
-# 4. Apply the recursive algorithm
-ts <- numeric(n)
-# i = 1:
-ts[1] <- cum_hazard_inv( - log(as[1]))
-
-for(i in 1 : (n - 1)){
-  ts[i + 1] <- ts[i] + haz_tilde_inv( u = - log(as[i + 1]), t = ts[i])
-}
-
+source("~/Helene_projekt/source_code_surv_sim.R")
 ```
 
 
 # Reproduktion af Helenes gamle beregner noter
 
 ```{r}
-# parameters
-lambda <- 0.0271
-v <- 1.3841
-
-# Number of individuals
-n <- 1715
-
 # Covariate indicating treatment
 X <- rbinom(n, 1, 0.1627)
 
@@ -64,7 +20,6 @@ X <- rbinom(n, 1, 0.1627)
 beta <- 0.7816
 
 # Hazard functions of cause 1 and cause 2
-
 weib_haz <- function(t, lambda, v) lambda * v * (v * t) ^ (v - 1)
 weib_cum_haz <- function(t, lambda, v) lambda * (v * t) ^ v 
 
@@ -127,5 +82,9 @@ p2 <- ggplot(data = data.frame(T2 = T2), aes(x = T2..density..)) +
 
 grid.arrange(p1, p2, ncol = 2)
 ```
+
+
+# Ny simulation
+
 
 
