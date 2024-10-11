@@ -12,9 +12,9 @@ library(tidyverse)
 ```
 
 
-# Generalisering af Helenes gamle beregner noter
+# Competing risk
 
-Simulation af kovariater til tid 0:
+Simulation of covariates to time 0:
 
 ```{r}
 n <- 1700
@@ -25,7 +25,7 @@ L0 <- cbind(X0, X1)
 
 # Effekt
 alpha <- c(0, 0)
-beta <- c(0.7816, -0.1)
+beta <- c(0.5816, -0.1)
 ```
 
 Hazard functions
@@ -36,12 +36,12 @@ lambda <- 0.0271
 v <- 1.3841
 
 # Specify hazard functions
-weib_haz <- function(t) lambda * v * (v * t) ^ (v - 1)
-weib_cum_haz <- function(t) lambda * (v * t) ^ v 
+weib_haz <- function(t) lambda * v * t ^ (v - 1)
+weib_cum_haz <- function(t) lambda * t ^ v 
 
 # Cause specific hazard functions
-haz1 <- function(t) weib_haz(t) * exp(t(alpha) %*% x)
-haz2 <- function(t) weib_haz(t) * exp(t(beta) %*% x)
+haz1 <- function(t) weib_haz(t) * exp(L0 %*% alpha)
+haz2 <- function(t) weib_haz(t) * exp(L0 %*% beta)
 ```
 
 Distribution function and inverse distribution function
@@ -80,7 +80,7 @@ for(i in 1:n){
 }
 
 # Simulating censoring
-censoring_time<- rweibull(n, 1.3841, 1/0.0271)
+censoring_time <- rweibull(n, 1.3841, 1/0.0271)
 # The event variable
 event <- ifelse(Ts <= censoring_time, 1, 0)
 ```
@@ -88,31 +88,43 @@ event <- ifelse(Ts <= censoring_time, 1, 0)
 Simulating the cause
 
 ```{r}
-# The probability of event being type 1
-p1 <- 1 / (1 + exp(beta * X))
-event_type <- ifelse(event == 1, rbinom(n, 1, p1), NA) # 1 indicates the event being of type 1, 0 indicating event of type 2
+# The probability of cause of event being 1
+p1 <- haz1(Ts) / (haz1(Ts) + haz2(Ts))
+
+cause_type <- ifelse(event == 1, rbinom(n, 1, 1 - p1) + 1, 0) # 1 indicates cause 1, 2 indicates cause of event being 2
 
 # Cause specific event times
-T1 <- ifelse(event_type == 1, Ts, 0) 
-T2 <- ifelse(event_type == 0, Ts, 0)
+T1 <- Ts[cause_type == 1]
+T2 <- Ts[cause_type == 2]
 ```
 
 Plots of distribution of evnt times
 
 ```{r}
-p1 <- ggplot(data = data.frame(T1 = T1), aes(x = T1, y = ..density..)) + 
+plot_1 <- ggplot(data = data.frame(T1 = T1), aes(x = T1, y = ..density..)) + 
   geom_histogram(binwidth = 1, fill = "blue", alpha = 0.5) + 
   theme_minimal()+
   labs(title = "Cause 1")
 
-p2 <- ggplot(data = data.frame(T2 = T2), aes(x = T2, y = ..density..)) + 
+plot_2 <- ggplot(data = data.frame(T2 = T2), aes(x = T2, y = ..density..)) + 
   geom_histogram(binwidth = 1, fill = "blue", alpha = 0.5) + 
   theme_minimal()+
   labs(title = "Cause 2")
 
-grid.arrange(p1, p2, ncol = 2)
+grid.arrange(plot_1, plot_2, ncol = 2)
 ```
 
+Output of function
+
+```{r}
+tibble(
+  Id = n,
+  X0 = X0,
+  X1 = X1,
+  "Time to event" = Ts,
+  "Cause" = cause_type
+)
+```
 
 
 
