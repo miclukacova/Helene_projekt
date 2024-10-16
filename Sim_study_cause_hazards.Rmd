@@ -127,5 +127,102 @@ tibble(
 ```
 
 
+# Simulating data with a non-terminal event
+
+We simulate with number of individuals
+
+```{r}
+N <- 100
+```
+
+Shape and scale parameter
+
+```{r}
+eta <- 0.1
+nu <- 1.2
+```
+
+Intensities (for $x = a,d,c$)
+
+```{r}
+# Effects
+effects <- c("a" = 0.1, "d" = 0.2, "c" = 0.3)
+
+
+lambda <- function(t, x) {
+  eta * nu * t ^ (nu - 1) * phi(t,x)
+}
+
+phi <- function(t, x) {
+  exp(L0 * effects[x])
+}
+```
+
+Summed cumulative hazard for waiting times
+
+```{r}
+sum_cum_haz <- function(u, t) {
+  term <- eta * (phi(t,"a") + phi(t,"d") + phi(t,"c"))
+  term * ((t + u) ^ nu - t ^ nu)
+}
+
+sum_cum_haz_inv <- function(u, t) {
+  term <- eta * (phi(t,"a") + phi(t,"d") + phi(t,"c"))
+  ((u + term * t ^ nu) / term ) ^ (1/nu) - t
+}
+```
+
+Probabilities of event type
+
+```{r}
+probs <- function(t){
+  summ <- phi(t,"a") + phi(t,"d") + phi(t,"c")
+  c(phi(t,"a") / summ, phi(t,"d") / summ, phi(t,"c") / summ)
+} 
+```
+
+Simulation
+
+```{r}
+res <- tibble(ID = numeric(), L0 = numeric(), Time = numeric(), Delta = numeric())
+
+set.seed(98)
+
+for(j in 1:N){
+  
+  # Draw
+  L0 <- runif(1)
+  
+  # Initialize
+  T_k1 <- 0
+  Delta <- 0
+  
+  # Iterate
+  
+  Ts <- c()
+  Deltas <- c()
+  i <- 1
+  
+  while(Delta == 0){
+    V <- runif(1)
+    W_k1 <- sum_cum_haz_inv(-log(V), L0)
+    T_k1 <- T_k1 + W_k1
+    Ts[i] <- T_k1
+    Deltas[i] <- sample(c(0,1,2), size = 1, prob = probs(T_k1))
+    Delta <- Deltas[i]
+    i <- i + 1
+  }
+  
+  jth_res <- tibble(ID = rep(j, length(Ts)), 
+                    L0 = rep(L0,length(Ts)), 
+                    Time = Ts, 
+                    Delta = Deltas) 
+  res <- bind_rows(res, jth_res)
+}
+
+res
+
+table(res$Delta)
+```
 
 
