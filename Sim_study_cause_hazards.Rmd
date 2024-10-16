@@ -146,28 +146,31 @@ Intensities (for $x = a,d,c$)
 
 ```{r}
 # Effects
-effects <- c("a" = 0.1, "d" = 0.2, "c" = 0.3)
+alpha <- c("a" = 0.1, "d" = 0.2, "c" = 0.3)
 
 
-lambda <- function(t, x) {
-  eta * nu * t ^ (nu - 1) * phi(t,x)
+lambda <- function(t, x, k) {
+  eta * nu * t ^ (nu - 1) * phi(t, x, k)
 }
 
-phi <- function(t, x) {
-  exp(L0 * effects[x])
+phi <- function(t, x, k) {
+  if(x == "a" & k == 2){
+    return(0)
+  }
+  exp(L0 * alpha[x])
 }
 ```
 
 Summed cumulative hazard for waiting times
 
 ```{r}
-sum_cum_haz <- function(u, t) {
-  term <- eta * (phi(t,"a") + phi(t,"d") + phi(t,"c"))
+sum_cum_haz <- function(u, t, k) {
+  term <- eta * (phi(t,"a",k) + phi(t, "d", k) + phi(t, "c", k))
   term * ((t + u) ^ nu - t ^ nu)
 }
 
-sum_cum_haz_inv <- function(u, t) {
-  term <- eta * (phi(t,"a") + phi(t,"d") + phi(t,"c"))
+sum_cum_haz_inv <- function(u, t, k) {
+  term <- eta * (phi(t,"a",k) + phi(t, "d", k) + phi(t, "c", k))
   ((u + term * t ^ nu) / term ) ^ (1/nu) - t
 }
 ```
@@ -175,9 +178,9 @@ sum_cum_haz_inv <- function(u, t) {
 Probabilities of event type
 
 ```{r}
-probs <- function(t){
-  summ <- phi(t,"a") + phi(t,"d") + phi(t,"c")
-  c(phi(t,"a") / summ, phi(t,"d") / summ, phi(t,"c") / summ)
+probs <- function(t, k){
+  summ <- phi(t,"a",k) + phi(t, "d", k) + phi(t, "c", k)
+  c(phi(t, "a", k) / summ, phi(t, "d", k) / summ, phi(t, "c", k) / summ)
 } 
 ```
 
@@ -201,16 +204,17 @@ for(j in 1:N){
   
   Ts <- c()
   Deltas <- c()
-  i <- 1
+  k <- 1
   
   while(Delta == 0){
     V <- runif(1)
-    W_k1 <- sum_cum_haz_inv(-log(V), L0)
+    W_k1 <- sum_cum_haz_inv(-log(V), L0, k)
     T_k1 <- T_k1 + W_k1
-    Ts[i] <- T_k1
-    Deltas[i] <- sample(c(0,1,2), size = 1, prob = probs(T_k1))
-    Delta <- Deltas[i]
-    i <- i + 1
+    Ts[k] <- T_k1
+    Deltas[k] <- sample(c(0,1,2), size = 1, prob = probs(T_k1, k))
+    print(probs(T_k1, k))
+    Delta <- Deltas[k]
+    k <- k + 1
   }
   
   jth_res <- tibble(ID = rep(j, length(Ts)), 
@@ -223,6 +227,83 @@ for(j in 1:N){
 res
 
 table(res$Delta)
+```
+
+# Writing a simulation function
+
+We create a simulation function that is a function of number of individuals $N$, the effect of the baseline covariate on the different intensities $\alpha \in \mathbb{R}^3$, the shape and scale parameter $\eta$ and $\nu$. 
+
+```{r}
+N <- 100
+eta <- 0.1
+nu <- 1.2
+alpha <- c("a" = 0.1, "d" = 0.2, "c" = 0.3)
+
+sur_sim <- function(N, alpha, eta, nu) {
+  
+  # Intensities
+
+  phi <- function(t, x, k) {
+    if(x == "a" & k == 2){
+      return(0)
+    }
+    exp(L0 * alpha[x])
+  }
+  
+  # Inverse Summed Cumulative hazard
+
+  sum_cum_haz_inv <- function(u, t, k) {
+    term <- eta * (phi(t,"a",k) + phi(t, "d", k) + phi(t, "c", k))
+    ((u + term * t ^ nu) / term ) ^ (1/nu) - t
+  }
+  
+  # Event probabilities
+  probs <- function(t, k){
+    summ <- phi(t,"a",k) + phi(t, "d", k) + phi(t, "c", k)
+    c(phi(t, "a", k) / summ, phi(t, "d", k) / summ, phi(t, "c", k) / summ)
+  }
+  
+  # Simulation
+  res <- tibble(ID = numeric(), L0 = numeric(), Time = numeric(), Delta = numeric())
+
+  for(j in 1:N){
+    
+    # Draw
+    L0 <- runif(1)
+    
+    # Initialize
+    T_k1 <- 0
+    Delta <- 0
+    
+    # Iterate
+    Ts <- c()
+    Deltas <- c()
+    k <- 1
+    
+    while(Delta == 0){
+      V <- runif(1)
+      W_k1 <- sum_cum_haz_inv(-log(V), L0, k)
+      T_k1 <- T_k1 + W_k1
+      Ts[k] <- T_k1
+      Deltas[k] <- sample(c(0,1,2), size = 1, prob = probs(T_k1, k))
+      Delta <- Deltas[k]
+      k <- k + 1
+    }
+    
+    jth_res <- tibble(ID = rep(j, length(Ts)), 
+                      L0 = rep(L0,length(Ts)), 
+                      Time = Ts, 
+                      Delta = Deltas) 
+    res <- bind_rows(res, jth_res)
+  }
+  return(res)
+}
+```
+
+Trying out the new simulation function
+
+```{r}
+sur_sim(N, alpha, eta, nu)
 ```
 
 
