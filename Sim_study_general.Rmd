@@ -1,0 +1,89 @@
+---
+title: 'Simulation Study: General Setting'
+output: html_document
+date: "2024-10-18"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# Libraries
+library(gridExtra)
+library(tidyverse)
+```
+
+We create a simulation function that is a function of number of individuals $N$, the effect of the baseline covariate on the different intensities $\beta_a,\beta_d,\beta_c \in \mathbb{R}^3$, the shape and scale parameterd $\eta^x$ and $\nu^x$. 
+
+```{r}
+N <- 100
+eta <- c("a" = 0.1, "d" = 0.1, "c" = 0.1)
+nu <- c("a" = 1.1, "d" = 1.1, "c" = 1.1)
+beta <- cbind(cbind("a" = c(0.1, 0.1), "d" = c(0.2, 0.1)), "c" = c(0.3,0.1))
+
+sur_sim <- function(N, beta, eta, nu) {
+  
+  # Intensities
+
+  phi_x <- function(t, x, k) {
+    exp(L0 * beta[x][1] + k * beta[x][2])
+  }
+  
+  at_risk <- function(x, k) {
+    if(x == "d" | x == "c") as.numeric(k == 1)
+    else as.numeric(k == 0)
+  }
+  
+  # Inverse Summed Cumulative hazard
+
+  sum_cum_haz_inv <- function(u, t, k) {
+    term <- eta[x] * (phi_x(t,"a",k) + phi_x(t, "d", k) + phi_x(t, "c", k))
+    ((u + term * t ^ nu[x]) / term ) ^ (1/nu[x]) - t
+  }
+  
+  # Event probabilities
+  probs <- function(t, k){
+    summ <- phi(t,"a",k) + phi(t, "d", k) + phi(t, "c", k)
+    c(phi(t, "a", k) / summ, phi(t, "d", k) / summ, phi(t, "c", k) / summ)
+  }
+  
+  # Simulation
+  res <- tibble(ID = numeric(), L0 = numeric(), Time = numeric(), Delta = numeric())
+
+  for(j in 1:N){
+    
+    # Draw
+    L0 <- runif(1)
+    
+    # Initialize
+    T_k1 <- 0
+    Delta <- 0
+    
+    # Iterate
+    Ts <- c()
+    Deltas <- c()
+    k <- 1
+    
+    while(Delta == 0){
+      V <- runif(1)
+      W_k1 <- sum_cum_haz_inv(-log(V), L0, k)
+      T_k1 <- T_k1 + W_k1
+      Ts[k] <- T_k1
+      Deltas[k] <- sample(c(0,1,2), size = 1, prob = probs(T_k1, k))
+      Delta <- Deltas[k]
+      k <- k + 1
+    }
+    
+    jth_res <- tibble(ID = rep(j, length(Ts)), 
+                      L0 = rep(L0,length(Ts)), 
+                      Time = Ts, 
+                      Delta = Deltas) 
+    res <- bind_rows(res, jth_res)
+  }
+  return(res)
+}
+```
+
+Trying out the new simulation function
+
+```{r}
+sur_sim(N, alpha, eta, nu)
+```
