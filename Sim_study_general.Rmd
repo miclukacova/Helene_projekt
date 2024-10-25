@@ -11,38 +11,79 @@ library(gridExtra)
 library(tidyverse)
 ```
 
-We create a simulation function that is a function of number of individuals $N$, the effect of the baseline covariate on the different intensities $\beta_a,\beta_d,\beta_c \in \mathbb{R}^3$, the shape and scale parameterd $\eta^x$ and $\nu^x$. 
+At risk functions for common settings
 
 ```{r}
-N <- 100
-eta <- c("a" = 0.1, "d" = 0.1, "c" = 0.1)
-nu <- c("a" = 1.1, "d" = 1.1, "c" = 1.1)
-beta <- cbind(cbind("a" = c(0.1, 0.1), "d" = c(0.2, 0.1)), "c" = c(0.3,0.1))
+at_risk_sur <- function(x, k) as.numeric(k == 0)
 
-sur_sim <- function(N, beta, eta, nu, setting = "survival") {
+at_risk_comp <- function(x, k)  as.numeric(k == 0)
+
+at_risk_op <- function(x, k) {
+  # x == 1 and x == 2 correspond to censoring and death
+  if(x == 1 | x == 2) as.numeric(k == 0 | k == 1)
+  # x == 0 corresponds to operation
+  else as.numeric(k == 0)
+}
+ 
+```
+
+
+We create a simulation function that is a function of
+- Number of individuals: `N`.
+- The effect of the baseline covariate and $k$ (the number of the event) on the different intensities: $\beta^x \in \mathbb{R}^{2}$ where $x \in X$. This input `beta` should be given as a matrix where each column corresponds to an event $x \in X$.
+- The shape `eta` and scale `nu` parameters $(\eta^x)_{x \in X} \in \mathbb{R}^{|X|}$ and $(\nu^x)_{x \in X} \in \mathbb{R}^{|X|}$
+- The at risk function `at_risk_func`: an indicator function indicating whether the individual is at risk for the event $x$ at time $t$.
+- The terminal events `Delta_Term`: a vector of the terminal events.
+
+```{r}
+sur_sim <- function(N,                      # Number of individuals
+                    beta,                   # Baseline covariate effects
+                    eta,                    # Shape parameters
+                    nu,                     # Scale parameters
+                    at_risk,                # Function defining the setting
+                    term_deltas             # Terminal events
+                    ){
+  
+  # Events
+  x <- 1:ncol(beta)
   
   # Intensities
-
-  phi_x <- function(t, x, k) {
-    exp(L0 * beta[x][1] + k * beta[x][2])
+  phi_x <- function(x, L0, k) {
+    exp(L0 * beta[,x][1] + k * beta[,x][2])
   }
   
-  at_risk <- function(x, k) {
-    if(x == "d" | x == "c") as.numeric(k == 1)
-    else as.numeric(k == 0)
-  }
   
-  # Inverse Summed Cumulative hazard
-
-  sum_cum_haz_inv <- function(u, t, k) {
-    term <- eta[x] * (phi_x(t,"a",k) + phi_x(t, "d", k) + phi_x(t, "c", k))
-    ((u + term * t ^ nu[x]) / term ) ^ (1/nu[x]) - t
+  lambda_x <- function(x, t, k) {
+    at_risk(x - 1, k) * eta[x] * nu[x] * t ^ (nu[x] - 1) * phi_x(x, L0, k)
+  } 
+  
+  # Summed cumulative hazard
+  sum_cum_haz <- function(u, t, k) {
+    sum(sapply(x, function(x) {
+      at_risk(x - 1, k) * eta[x] * phi_x(x, L0, k) * ((t + u) ^ nu[x] - t ^ nu[x])
+    }))}
+  
+  
+  # Inverse summed cumulative hazard function
+  inverse_sc_haz <- function(p, t, k, lower_bound = 0, upper_bound = 100) {
+    
+    root_function <- function(u) sum_cum_haz(u, t, k) - p
+    
+  uniroot(root_function, lower = lower_bound, upper = upper_bound)$root
   }
   
   # Event probabilities
   probs <- function(t, k){
-    summ <- phi(t,"a",k) + phi(t, "d", k) + phi(t, "c", k)
-    c(phi(t, "a", k) / summ, phi(t, "d", k) / summ, phi(t, "c", k) / summ)
+    
+    summ <- sum(sapply(x, function(x) lambda_x(x, t, k)))
+    
+    probs <- numeric(length(x))
+    
+    for(i in seq_along(x)){
+      probs[i] <- lambda_x(x[i], t, k) / summ
+    }
+    
+    return(probs)
   }
   
   # Simulation
@@ -55,20 +96,21 @@ sur_sim <- function(N, beta, eta, nu, setting = "survival") {
     
     # Initialize
     T_k1 <- 0
-    Delta <- 0
+    Delta <- -1
     
     # Iterate
     Ts <- c()
     Deltas <- c()
-    k <- 1
+    k <- 0
     
-    while(Delta == 0){
+    #browser()
+    while(! Delta %in% term_deltas){
       V <- runif(1)
-      W_k1 <- sum_cum_haz_inv(-log(V), L0, k)
+      W_k1 <- inverse_sc_haz(-log(V), T_k1, k)
       T_k1 <- T_k1 + W_k1
-      Ts[k] <- T_k1
-      Deltas[k] <- sample(c(0,1,2), size = 1, prob = probs(T_k1, k))
-      Delta <- Deltas[k]
+      Ts[k + 1] <- T_k1
+      Deltas[k + 1] <- sample(1:length(x), size = 1, prob = probs(T_k1, k)) - 1
+      Delta <- Deltas[k + 1]
       k <- k + 1
     }
     
@@ -85,5 +127,18 @@ sur_sim <- function(N, beta, eta, nu, setting = "survival") {
 Trying out the new simulation function
 
 ```{r}
-sur_sim(N, alpha, eta, nu)
+N <- 100
+eta <- c(0.1, 0.1, 0.1)
+nu <- c(1.1, 1.1, 1.1)
+beta <- matrix(c(0.1, 0.1, 0.2, 0.1, 0.3,0.1), ncol = 3)
+
+term_deltas <- c(1, 2)
+
+# Checking whether the simulations work
+sur_sim(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk_op, 
+        term_deltas = term_deltas)
+sur_sim(N = N, beta = beta[,2:3], eta = eta[2:3], nu = nu[2:3], at_risk = at_risk_sur, 
+        term_deltas = c(0,1))
+sur_sim(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk_comp, 
+        term_deltas = c(0,1,2))
 ```

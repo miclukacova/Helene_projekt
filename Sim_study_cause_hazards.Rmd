@@ -282,7 +282,7 @@ sur_sim <- function(N, alpha, eta, nu) {
     
     while(Delta == 0){
       V <- runif(1)
-      W_k1 <- sum_cum_haz_inv(-log(V), L0, k)
+      W_k1 <- sum_cum_haz_inv(-log(V), T_k1, k)
       T_k1 <- T_k1 + W_k1
       Ts[k] <- T_k1
       Deltas[k] <- sample(c(0,1,2), size = 1, prob = probs(T_k1, k))
