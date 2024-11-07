@@ -30,7 +30,7 @@ at_risk_op <- function(x, k) {
 
 We create a simulation function that is a function of
 - Number of individuals: `N`.
-- The effect of the baseline covariate and $k$ (the number of the event) on the different intensities: $\beta^x \in \mathbb{R}^{2}$ where $x \in X$. This input `beta` should be given as a matrix where each column corresponds to an event $x \in X$.
+- The effect of the baseline covariate, the effect of $k$ (the number of the event) and the effect of treatment $A$ on the different intensities: $\beta^x \in \mathbb{R}^{3}$ where $x \in X$. The input `beta` should be given as a matrix where each column corresponds to an event $x \in X$.
 - The shape `eta` and scale `nu` parameters $(\eta^x)_{x \in X} \in \mathbb{R}^{|X|}$ and $(\nu^x)_{x \in X} \in \mathbb{R}^{|X|}$
 - The at risk function `at_risk_func`: an indicator function indicating whether the individual is at risk for the event $x$ at time $t$.
 - The terminal events `Delta_Term`: a vector of the terminal events.
@@ -48,19 +48,19 @@ sur_sim <- function(N,                      # Number of individuals
   x <- 1:ncol(beta)
   
   # Intensities
-  phi_x <- function(x, L0, k) {
-    exp(L0 * beta[1,x] + k * beta[2,x])
+  phi_x <- function(x, k) {
+    exp(L0 * beta[1,x] + k * beta[2,x] + A * beta[3,x])
   }
   
   
   lambda_x <- function(x, t, k) {
-    at_risk(x - 1, k) * eta[x] * nu[x] * t ^ (nu[x] - 1) * phi_x(x, L0, k)
+    at_risk(x - 1, k) * eta[x] * nu[x] * t ^ (nu[x] - 1) * phi_x(x, k)
   } 
   
   # Summed cumulative hazard
   sum_cum_haz <- function(u, t, k) {
     sum(sapply(x, function(x) {
-      at_risk(x - 1, k) * eta[x] * phi_x(x, L0, k) * ((t + u) ^ nu[x] - t ^ nu[x])
+      at_risk(x - 1, k) * eta[x] * phi_x(x, k) * ((t + u) ^ nu[x] - t ^ nu[x])
     }))}
   
   
@@ -82,12 +82,13 @@ sur_sim <- function(N,                      # Number of individuals
   }
   
   # Simulation
-  res <- data.frame(ID = numeric(), L0 = numeric(), Time = numeric(), Delta = numeric())
+  res <- tibble(ID = numeric(), L0 = numeric(), Time = numeric(), Delta = numeric(), A = numeric())
 
   for(j in 1:N){
     
     # Draw
     L0 <- runif(1)
+    A <- rbinom(1, 1, 0.5)
     
     # Initialize
     T_k1 <- 0
@@ -109,11 +110,12 @@ sur_sim <- function(N,                      # Number of individuals
       k <- k + 1
     }
     
-    jth_res <- data.frame(ID = rep(j, length(Ts)), 
-                      L0 = rep(L0,length(Ts)), 
+    jth_res <- tibble(ID = rep(j, length(Ts)), 
+                      L0 = rep(L0,length(Ts)),
+                      A = rep(A,length(Ts)),
                       Time = Ts, 
                       Delta = Deltas) 
-    res <- rbind(res, jth_res)
+    res <- bind_rows(res, jth_res)
   }
   return(res)
 }
@@ -125,7 +127,7 @@ Trying out the new simulation function
 N <- 100
 eta <- c(0.1, 0.1, 0.1)
 nu <- c(1.1, 1.1, 1.1)
-beta <- matrix(c(3, 0.1, 3, 0.1, 3,0.1), ncol = 3)
+beta <- matrix(c(3, 0.1, 0, 3, 0.1, -1, 3, 0.1, 0), ncol = 3)
 
 term_deltas <- c(1, 2)
 
@@ -155,11 +157,11 @@ data <- sur_sim(N = N, beta = beta[,2:3], eta = eta[2:3], nu = nu[2:3], at_risk 
 
 ggplot(data) +
   geom_point(aes(x = L0, y = Time))+
-  facet_wrap(~Delta)
+  facet_wrap(~A)
 
 
 library(survival)
-survfit <- coxph(Surv(Time, Delta == 0) ~ L0, data = data)
+survfit <- coxph(Surv(Time, Delta == 0) ~ L0 + A, data = data)
 summary(survfit)
 ```
 
