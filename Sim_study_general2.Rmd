@@ -82,13 +82,16 @@ sur_sim <- function(N,                      # Number of individuals
   }
   
   # Simulation
-  res <- tibble(ID = numeric(), L0 = numeric(), Time = numeric(), Delta = numeric(), A = numeric())
+  res <- tibble(ID = numeric(), Time = numeric(), Delta = numeric(), L0 = numeric(), 
+                L1 = numeric(), A = numeric())
 
   for(j in 1:N){
     
     # Draw
     L0 <- runif(1)
     A <- rbinom(1, 1, 0.5)
+    L1 <- numeric()
+    L1[1] <- runif(1)
     
     # Initialize
     T_k1 <- 0
@@ -101,6 +104,7 @@ sur_sim <- function(N,                      # Number of individuals
     
     #browser()
     while(! Delta %in% term_deltas){
+      if(k > 0) L1[k + 1] <- rnorm(0.05 * L0 + L1[k], sqrt(0.01))
       V <- runif(1)
       W_k1 <- inverse_sc_haz(-log(V), T_k1, k)
       T_k1 <- T_k1 + W_k1
@@ -111,10 +115,11 @@ sur_sim <- function(N,                      # Number of individuals
     }
     
     jth_res <- tibble(ID = rep(j, length(Ts)), 
-                      L0 = rep(L0,length(Ts)),
-                      A = rep(A,length(Ts)),
                       Time = Ts, 
-                      Delta = Deltas) 
+                      Delta = Deltas,
+                      L0 = rep(L0,length(Ts)),
+                      L1 = rep(L1,length(Ts)),
+                      A = rep(A,length(Ts))) 
     res <- bind_rows(res, jth_res)
   }
   return(res)
