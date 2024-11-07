@@ -145,4 +145,5 @@ sur_sim(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk_comp,
 
 survsim::sur_sim(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk_op, 
         term_deltas = term_deltas)
+
 ```
