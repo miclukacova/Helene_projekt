@@ -48,7 +48,7 @@ sur_sim <- function(N,                      # Number of individuals
                 L1 = numeric(), A = numeric())
   
   for(j in 1:N){
-    
+    #browser()
     # Draw
     L0 <- runif(1)
     A <- rbinom(1, 1, 0.5)
@@ -66,7 +66,7 @@ sur_sim <- function(N,                      # Number of individuals
     
     #browser()
     while(! Delta %in% term_deltas){
-      if(k > 0) L1[k + 1] <- rnorm(0.05 * L0 + L1[k], sqrt(0.01))
+      if(k > 0) L1[k + 1] <- rnorm(1, 0.05 * L0 + L1[k], sqrt(0.01))
       V <- runif(1)
       W_k1 <- inverse_sc_haz(-log(V), T_k1, k)
       T_k1 <- T_k1 + W_k1
@@ -80,9 +80,10 @@ sur_sim <- function(N,                      # Number of individuals
                       Time = Ts, 
                       Delta = Deltas,
                       L0 = rep(L0,length(Ts)),
-                      L1 = rep(L1,length(Ts)),
+                      L1 = L1,
                       A = rep(A,length(Ts))) 
     res <- bind_rows(res, jth_res)
   }
   return(res)
 }
+

@@ -91,7 +91,8 @@ data1 <- sur_sim(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk_op,
 
 data1[data1$ID == 9,]
 
-plotdata <- rbind(data1, data.frame("ID" = unique(data1$ID), L0 = unique(data1$L0), "Time" = 0, "Delta" = "start"))
+plotdata <- rbind(data1, data.frame("ID" = unique(data1$ID), L0 = unique(data1$L0),
+                                    "Time" = 0, "Delta" = "start", L1 = 0, A = unique(data1$A)))
 ggplot(plotdata) +
   geom_point(aes(x = Time, y = ID, shape = factor(Delta))) +
   theme_minimal()+
