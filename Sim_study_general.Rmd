@@ -9,23 +9,41 @@ knitr::opts_chunk$set(echo = TRUE)
 # Libraries
 library(gridExtra)
 library(tidyverse)
+library(survival)
 source("~/Helene_projekt/Source code/sim_surv.R")
 ```
+
+### Notation
+
+We use the following notation. 
+
+$x \in \{1,...,m}$ denotes the event type. $x=0$ corresponds to the operation event, $x=1$ to the censoring event, $x=2$ to the death event, $x = 3$ corresponds to a change in the covariate process (e.g. a worsening in condition). 
+
+$k$ counts the number of events.
+
+$m$ is an indicator for the operation event. 
 
 ### At risk functions
 
 At risk functions for common settings.
 
 ```{r}
-at_risk_sur <- function(x, k) as.numeric(k == 0)
+# Survival at risk function
+# You are only at risk until some event happens
+at_risk_sur <- function(x, k, m) as.numeric(k == 0)
 
-at_risk_comp <- function(x, k)  as.numeric(k == 0)
+# Competing risk setting
+# You are only at risk until some event happens
+at_risk_comp <- function(x, k, m)  as.numeric(k == 0)
 
-at_risk_op <- function(x, k) {
-  # x == 1 and x == 2 correspond to censoring and death
-  if(x == 1 | x == 2) as.numeric(k == 0 | k == 1)
-  # x == 0 corresponds to operation
-  else as.numeric(k == 0)
+# Operation setting
+at_risk_op <- function(x, k, m) {
+  # If you have not died yet or been censored yet, you are at risk for dying or being censored
+  if(x == 1 | x == 2) return(1)
+  # You are only at risk for an operation if you have not had an operation yet
+  else if(x == 0) return(as.numeric(k == 0 | (k == 1 & m == 1)))
+  # You are only at risk for a change in the covariate process if you have not had a change yet
+  else return(as.numeric(m == 0))
 }
  
 ```
@@ -34,28 +52,41 @@ at_risk_op <- function(x, k) {
 
 We create a simulation function that is a function of
 - Number of individuals: `N`.
-- The effect of the baseline covariate and $k$ (the number of the event) on the different intensities: $\beta^x \in \mathbb{R}^{2}$ where $x \in X$. This input `beta` should be given as a matrix where each column corresponds to an event $x \in X$.
+
+- The effect of the baseline covariates and $k$ and on the different intensities: $\beta^x \in \mathbb{R}^{4}$ where $x \in X$. This input, `beta`, should be given as a matrix where each column corresponds to an event $x \in X$. The first row is the effect of the baseline covariate $L_0$, the second row is the effect of $k$, the third row is the effect of treatment $A$, and the fourth row is the effect of time varying covariate $L_1$. 
+
 - The shape `eta` and scale `nu` parameters $(\eta^x)_{x \in X} \in \mathbb{R}^{|X|}$ and $(\nu^x)_{x \in X} \in \mathbb{R}^{|X|}$
+
 - The at risk function `at_risk_func`: an indicator function indicating whether the individual is at risk for the event $x$ at time $t$.
+
 - The terminal events `Delta_Term`: a vector of the terminal events.
 
 Trying out the new simulation function
 
 ```{r}
 N <- 100
-eta <- c(0.1, 0.1, 0.1)
-nu <- c(1.1, 1.1, 1.1)
-beta <- matrix(c(3, 0.1, 0, 3, 0.1, -1, 3, 0.1, 0), ncol = 3)
+eta <- c(0.1, 0.1, 0.1, 0.1)
+nu <- c(1.1, 1.1, 1.1, 1.1)
+# Effect on Operation
+beta0 <- c(3, 2, 2, -1)
+# Effect on Censoring
+beta1 <- c(0, 0, 0, 0)
+# Effect on Death
+beta2 <- c(3, -2, -2, -1)
+# Effect on time varying covariate
+beta3 <- c(3, -1, -1, -1)
+
+beta <- cbind(beta0, beta1, beta2, beta3)
 
 term_deltas <- c(1, 2)
 
 # Checking whether the simulations work
-sur_sim(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk_op, 
-        term_deltas = term_deltas)
+sur_sim(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk_op, term_deltas = term_deltas)
+
 sur_sim(N = N, beta = beta[,2:3], eta = eta[2:3], nu = nu[2:3], at_risk = at_risk_sur, 
         term_deltas = c(0,1))
 sur_sim(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk_comp, 
-        term_deltas = c(0,1,2))
+        term_deltas = c(0,1,2,3))
 
 
 #survsim::sur_sim(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk_op, 
@@ -63,11 +94,29 @@ sur_sim(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk_comp,
 
 ```
 
-## Testing out the simulation function
+### Testing out the simulation function
 
-## Testing out the simulation function
+We sanity check the simulation by fitting models and checking that they estimate the effects correctly. We start out with the general model and the recurrent event setting. 
 
-We test whether the fitted model estimates beta approximately corectly.
+```{r}
+# Generating data
+N <- 300
+data_test <- sur_sim(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk_op, term_deltas = term_deltas)
+# Creating a k variable
+data_test <- data_test %>% mutate(k = ave(ID, ID, FUN = seq_along)) 
+
+
+survfit_oper <- coxph(Surv(Time, Delta == 0) ~ L0 + k + A + L1, data = data_test)
+survfit_cens <- coxph(Surv(Time, Delta == 1) ~ L0 + k + A + L1, data = data_test)
+survfit_death <- coxph(Surv(Time, Delta == 2) ~ L0 + k + A + L1, data = data_test)
+survfit_cov <- coxph(Surv(Time, Delta == 3) ~ L0 + k + A + L1, data = data_test)
+survfit_oper$coefficients; beta0
+survfit_cens$coefficients; beta1
+survfit_death$coefficients; beta2
+survfit_cov$coefficients; beta3
+```
+
+Something is wrong:(
 
 ```{r}
 # Survival setting
@@ -76,15 +125,17 @@ data <- sur_sim(N = N, beta = beta[,2:3], eta = eta[2:3], nu = nu[2:3], at_risk 
         term_deltas = c(0,1))
 
 ggplot(data) +
-  geom_point(aes(x = L0, y = Time))+
-  facet_wrap(~A)
+  geom_point(aes(x = L0, y = Time)) +
+  facet_grid(A ~ Delta)
 
-
-library(survival)
-survfit <- coxph(Surv(Time, Delta == 0) ~ L0 + A, data = data)
+survfit <- coxph(Surv(Time, Delta == 0) ~ L0 + A + L1, data = data)
 summary(survfit)
+```
 
-# Competing risks setting
+### Visualizing the simulation results
+
+```{r}
+# Recurrent event setting
 N <- 50
 data1 <- sur_sim(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk_op, 
         term_deltas = term_deltas)
