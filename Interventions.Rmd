@@ -1,0 +1,62 @@
+---
+title: "Effect of interventions"
+output: html_document
+date: "2024-11-14"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# Libraries
+library(gridExtra)
+library(tidyverse)
+library(survival)
+source("~/Helene_projekt/Source code/sim_surv.R")
+source("~/Helene_projekt/Source code/Simple_functions.R")
+```
+
+
+# 1. Simulate data
+
+```{r}
+sim1 <- simple1(2000, c(1,2,3), c(0.1,0.1,0.1), c(1.1,1.1,1.1))
+```
+
+
+# 2. Fit a Weibull 
+
+```{r}
+survfit <- survreg(Surv(Time, Delta == 1) ~ L0, data = sim1, dist='weibull')
+```
+
+# 3. Estimate parameters
+
+```{r}
+shape_est <- 1/survfit$scale; 
+shape_est; 1.1
+scale_est <- 1/exp(survfit$coefficients[1]);
+scale_est; 0.1
+```
+
+# 4. Simulate new data using the estimated parameters
+
+```{r}
+sim_obs <- simple1(3000, c(1,2,3), rep(scale_est, 3), rep(shape_est, 3))
+```
+
+# 5. Simulate new data under intervention
+
+We intervene by setting $L0 = 0$
+
+```{r}
+sim_int <- simple1(3000, rep(0,3), rep(scale_est, 3), rep(shape_est, 3))
+```
+
+# 6. Estimate average causal effects
+
+```{r}
+mean(sim_obs[sim_obs$Delta == 0,]$Time) - mean(sim_int[sim_int$Delta == 0,]$Time)
+mean(sim_obs[sim_obs$Delta == 1,]$Time) - mean(sim_int[sim_int$Delta == 1,]$Time)
+mean(sim_obs[sim_obs$Delta == 2,]$Time) - mean(sim_int[sim_int$Delta == 2,]$Time)
+```
+
+

@@ -11,6 +11,7 @@ library(gridExtra)
 library(tidyverse)
 library(survival)
 source("~/Helene_projekt/Source code/sim_surv.R")
+source("~/Helene_projekt/Source code/Simple_functions.R")
 ```
 
 ### Notation
@@ -28,16 +29,12 @@ $m$ is an indicator for the operation event.
 At risk functions for common settings.
 
 ```{r}
-# Survival at risk function
+# Survival and competing at risk function
 # You are only at risk until some event happens
-at_risk_sur <- function(x, k, m) as.numeric(k == 0)
-
-# Competing risk setting
-# You are only at risk until some event happens
-at_risk_comp <- function(x, k, m)  as.numeric(k == 0)
+at_risk1 <- function(x, k, m) as.numeric(k == 0)
 
 # Operation setting
-at_risk_op <- function(x, k, m) {
+at_risk2 <- function(x, k, m) {
   # If you have not died yet or been censored yet, you are at risk for dying or being censored
   if(x == 1 | x == 2) return(1)
   # You are only at risk for an operation if you have not had an operation yet
@@ -68,24 +65,24 @@ N <- 100
 eta <- c(0.1, 0.1, 0.1, 0.1)
 nu <- c(1.1, 1.1, 1.1, 1.1)
 # Effect on Operation
-beta0 <- c(3, 2, 2, -1)
+beta0 <- c(3, 0, 1, 9)
 # Effect on Censoring
-beta1 <- c(0, 0, 0, 0)
+beta1 <- c(0, 0, -1, 5)
 # Effect on Death
-beta2 <- c(3, -2, -2, -1)
+beta2 <- c(3, 0, 1, 1)
 # Effect on time varying covariate
-beta3 <- c(3, -1, -1, -1)
+beta3 <- c(3, 0, -1, 0.5)
 
 beta <- cbind(beta0, beta1, beta2, beta3)
 
 term_deltas <- c(1, 2)
 
 # Checking whether the simulations work
-sur_sim(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk_op, term_deltas = term_deltas)
+sur_sim(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk2, term_deltas = term_deltas)
 
-sur_sim(N = N, beta = beta[,2:3], eta = eta[2:3], nu = nu[2:3], at_risk = at_risk_sur, 
+sur_sim(N = N, beta = beta[,2:3], eta = eta[2:3], nu = nu[2:3], at_risk = at_risk1, 
         term_deltas = c(0,1))
-sur_sim(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk_comp, 
+sur_sim(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk1, 
         term_deltas = c(0,1,2,3))
 
 
@@ -100,8 +97,8 @@ We sanity check the simulation by fitting models and checking that they estimate
 
 ```{r}
 # Generating data
-N <- 300
-data_test <- sur_sim(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk_op, term_deltas = term_deltas)
+N <- 2000
+data_test <- sur_sim(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk2, term_deltas = term_deltas)
 # Creating a k variable
 data_test <- data_test %>% mutate(k = ave(ID, ID, FUN = seq_along)) 
 
@@ -110,34 +107,47 @@ survfit_oper <- coxph(Surv(Time, Delta == 0) ~ L0 + k + A + L1, data = data_test
 survfit_cens <- coxph(Surv(Time, Delta == 1) ~ L0 + k + A + L1, data = data_test)
 survfit_death <- coxph(Surv(Time, Delta == 2) ~ L0 + k + A + L1, data = data_test)
 survfit_cov <- coxph(Surv(Time, Delta == 3) ~ L0 + k + A + L1, data = data_test)
-survfit_oper$coefficients; beta0
-survfit_cens$coefficients; beta1
-survfit_death$coefficients; beta2
-survfit_cov$coefficients; beta3
+confint(survfit_oper); beta0
+confint(survfit_cens); beta1
+confint(survfit_death); beta2
+confint(survfit_cov); beta3
 ```
 
 Something is wrong:(
 
 ```{r}
 # Survival setting
-N <- 200
-data <- sur_sim(N = N, beta = beta[,2:3], eta = eta[2:3], nu = nu[2:3], at_risk = at_risk_sur, 
-        term_deltas = c(0,1))
+N <- 5000
+data <- sur_sim(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk1, term_deltas = c(0,1,2,3))
 
 ggplot(data) +
   geom_point(aes(x = L0, y = Time)) +
-  facet_grid(A ~ Delta)
+  facet_grid(A ~ Delta, labeller = labeller(A = label_both, Delta = label_both))
 
-survfit <- coxph(Surv(Time, Delta == 0) ~ L0 + A + L1, data = data)
-summary(survfit)
+ggplot(data) +
+  geom_point(aes(x = L1, y = Time)) +
+  facet_grid(A ~ Delta, labeller = labeller(A = label_both, Delta = label_both))
+
+survfit_death <- coxph(Surv(Time, Delta == 2) ~ L0 + A + L1, data = data)
+confint(survfit_death); beta2
+
+survfit_oper <- coxph(Surv(Time, Delta == 0) ~ L0 + A + L1, data = data)
+confint(survfit_oper); beta0
+
+survfit_cens <- coxph(Surv(Time, Delta == 1) ~ L0 + A + L1, data = data)
+confint(survfit_cens); beta1
+
+survfit_cov <- coxph(Surv(Time, Delta == 3) ~ L0 + A + L1, data = data)
+confint(survfit_cov); beta3
 ```
+Det her ser mere fornuftigt ud?
 
 ### Visualizing the simulation results
 
 ```{r}
 # Recurrent event setting
 N <- 50
-data1 <- sur_sim(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk_op, 
+data1 <- sur_sim(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk2, 
         term_deltas = term_deltas)
 
 data1[data1$ID == 9,]
@@ -145,14 +155,69 @@ data1[data1$ID == 9,]
 plotdata <- rbind(data1, data.frame("ID" = unique(data1$ID), L0 = unique(data1$L0),
                                     "Time" = 0, "Delta" = "start", L1 = 0, A = unique(data1$A)))
 ggplot(plotdata) +
-  geom_point(aes(x = Time, y = ID, shape = factor(Delta))) +
-  theme_minimal()+
-  geom_line(aes(x = Time, y = ID, group = ID))+
-  labs(title = "Competing risks survival data", shape = "Event")
+  geom_line(aes(x = Time, y = ID, group = ID), color = "grey60", size = 0.7) +  # Light gray lines for each ID
+  geom_point(aes(x = Time, y = ID, shape = factor(Delta), color = factor(Delta)), size = 3) + # Use shapes and colors for Delta
+  theme_minimal(base_size = 15) +  # Increase base font size for readability
+  scale_shape_manual(values = c(8, 20, 20 , 8, 20)) +  # Customize shapes for different events
+  scale_color_manual(values = c("darkorange", "blue3", "lightgreen", "darkred", "pink")) +  # Customize colors for events
+  labs(
+    title = "Competing Risks Survival Data",
+    x = "Time",
+    y = "Patient ID",
+    shape = "Event Type",
+    color = "Event Type"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),  # Center and bold title
+    axis.title.y = element_text(margin = margin(r = 10)),  # Add space to y-axis title
+    axis.title.x = element_text(margin = margin(t = 10)),  # Add space to x-axis title
+    legend.position = "top"  # Place legend on top for easy viewing
+  )
 
 ```
 
 
+### Testing out the simple functions
+
+simple1 has no covariate process, no treatment A, no additional covariate L1, and no effect of $k$. 
+
+```{r}
+data_test1 <- simple1(1000, c(1,2,3), c(0.2,0.2,0.2), c(1.2,1.2,1.2))
+
+data_test1[data_test1$ID == 9,]
+
+plotdata <- data_test1[data_test1$ID %in% 1:40,]
+plotdata <- plotdata %>%
+  rbind(data.frame("ID" = unique(plotdata$ID), L0 = unique(plotdata$L0),
+                                    "Time" = 0, "Delta" = "start"))
+
+ggplot(plotdata) +
+  geom_line(aes(x = Time, y = ID, group = ID), color = "grey60", size = 0.7) +  # Light gray lines for each ID
+  geom_point(aes(x = Time, y = ID, shape = factor(Delta), color = factor(Delta)), size = 3) + # Use shapes and colors for Delta
+  theme_minimal(base_size = 15) +  # Increase base font size for readability
+  scale_shape_manual(values = c(8, 20, 20, 20)) +  # Customize shapes for different events
+  scale_color_manual(values = c("darkorange", "blue3", "lightgreen", "darkred")) +  # Customize colors for events
+  labs(
+    title = "Competing Risks Survival Data",
+    x = "Time",
+    y = "Patient ID",
+    shape = "Event Type",
+    color = "Event Type"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),  # Center and bold title
+    axis.title.y = element_text(margin = margin(r = 10)),  # Add space to y-axis title
+    axis.title.x = element_text(margin = margin(t = 10)),  # Add space to x-axis title
+    legend.position = "top"  # Place legend on top for easy viewing
+  )
+
+survfit <- coxph(Surv(Time, Delta == 2) ~ L0, data = data_test1)
+confint(survfit); 3
+survfit <- coxph(Surv(Time, Delta == 1) ~ L0, data = data_test1)
+confint(survfit); 2
+survfit <- coxph(Surv(Time, Delta == 0) ~ L0, data = data_test1)
+confint(survfit); 1
+```
 
 
 
