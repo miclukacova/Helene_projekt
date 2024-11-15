@@ -1,5 +1,5 @@
 sur_sim <- function(N,                      # Number of individuals
-                    beta,                   # Baseline covariate effects
+                    beta,                   # Effects
                     eta,                    # Shape parameters
                     nu,                     # Scale parameters
                     at_risk,                # Function defining the setting

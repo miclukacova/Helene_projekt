@@ -61,7 +61,7 @@ We create a simulation function that is a function of
 Trying out the new simulation function
 
 ```{r}
-N <- 100
+N <- 50
 eta <- c(0.1, 0.1, 0.1, 0.1)
 nu <- c(1.1, 1.1, 1.1, 1.1)
 # Effect on Operation
@@ -78,13 +78,16 @@ beta <- cbind(beta0, beta1, beta2, beta3)
 term_deltas <- c(1, 2)
 
 # Checking whether the simulations work
-sur_sim(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk2, term_deltas = term_deltas)
+data1 <- sur_sim(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk2, term_deltas = term_deltas)
+my_plot(data1)
 
-sur_sim(N = N, beta = beta[,2:3], eta = eta[2:3], nu = nu[2:3], at_risk = at_risk1, 
+data2 <- sur_sim(N = N, beta = beta[,2:3], eta = eta[2:3], nu = nu[2:3], at_risk = at_risk1, 
         term_deltas = c(0,1))
-sur_sim(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk1, 
-        term_deltas = c(0,1,2,3))
+my_plot(data2)
 
+data3 <- sur_sim(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk1, 
+        term_deltas = c(0,1,2,3))
+my_plot(data3)
 
 #survsim::sur_sim(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk_op, 
 #        term_deltas = term_deltas)
@@ -99,33 +102,31 @@ We sanity check the simulation by fitting models and checking that they estimate
 # Generating data
 N <- 2000
 data_test <- sur_sim(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk2, term_deltas = term_deltas)
-# Creating a k variable
-data_test <- data_test %>% mutate(k = ave(ID, ID, FUN = seq_along)) 
+# Creating a k and m variable
+data_test <- data_test %>% mutate(k = ave(ID, ID, FUN = seq_along) - 1) %>% 
+  mutate(m = ave(ID, ID, FUN = seq_along)) 
 
 
-survfit_oper <- coxph(Surv(Time, Delta == 0) ~ L0 + k + A + L1, data = data_test)
-survfit_cens <- coxph(Surv(Time, Delta == 1) ~ L0 + k + A + L1, data = data_test)
-survfit_death <- coxph(Surv(Time, Delta == 2) ~ L0 + k + A + L1, data = data_test)
-survfit_cov <- coxph(Surv(Time, Delta == 3) ~ L0 + k + A + L1, data = data_test)
+
+survfit_oper <- coxph(Surv(Time, Delta == 0) ~ L0 + k + A + L1, data = data_test[data_test$k == 0,])
+survfit_cens <- coxph(Surv(Time, Delta == 1) ~ L0 + k + A + L1, data = data_test[data_test$k == 0,])
+survfit_death <- coxph(Surv(Time, Delta == 2) ~ L0 + k + A + L1, data = data_test[data_test$k == 0,])
+survfit_cov <- coxph(Surv(Time, Delta == 3) ~ L0 + k + A + L1, data = data_test[data_test$k == 0,])
 confint(survfit_oper); beta0
 confint(survfit_cens); beta1
 confint(survfit_death); beta2
 confint(survfit_cov); beta3
 ```
 
-Something is wrong:(
+
 
 ```{r}
 # Survival setting
-N <- 5000
+N <- 1000
 data <- sur_sim(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk1, term_deltas = c(0,1,2,3))
 
 ggplot(data) +
   geom_point(aes(x = L0, y = Time)) +
-  facet_grid(A ~ Delta, labeller = labeller(A = label_both, Delta = label_both))
-
-ggplot(data) +
-  geom_point(aes(x = L1, y = Time)) +
   facet_grid(A ~ Delta, labeller = labeller(A = label_both, Delta = label_both))
 
 survfit_death <- coxph(Surv(Time, Delta == 2) ~ L0 + A + L1, data = data)
@@ -152,30 +153,8 @@ data1 <- sur_sim(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk2,
 
 data1[data1$ID == 9,]
 
-plotdata <- rbind(data1, data.frame("ID" = unique(data1$ID), L0 = unique(data1$L0),
-                                    "Time" = 0, "Delta" = "start", L1 = 0, A = unique(data1$A)))
-ggplot(plotdata) +
-  geom_line(aes(x = Time, y = ID, group = ID), color = "grey60", size = 0.7) +  # Light gray lines for each ID
-  geom_point(aes(x = Time, y = ID, shape = factor(Delta), color = factor(Delta)), size = 3) + # Use shapes and colors for Delta
-  theme_minimal(base_size = 15) +  # Increase base font size for readability
-  scale_shape_manual(values = c(8, 20, 20 , 8, 20)) +  # Customize shapes for different events
-  scale_color_manual(values = c("darkorange", "blue3", "lightgreen", "darkred", "pink")) +  # Customize colors for events
-  labs(
-    title = "Competing Risks Survival Data",
-    x = "Time",
-    y = "Patient ID",
-    shape = "Event Type",
-    color = "Event Type"
-  ) +
-  theme(
-    plot.title = element_text(hjust = 0.5, face = "bold"),  # Center and bold title
-    axis.title.y = element_text(margin = margin(r = 10)),  # Add space to y-axis title
-    axis.title.x = element_text(margin = margin(t = 10)),  # Add space to x-axis title
-    legend.position = "top"  # Place legend on top for easy viewing
-  )
-
+my_plot(data1)
 ```
-
 
 ### Testing out the simple functions
 
@@ -183,47 +162,41 @@ simple1 has no covariate process, no treatment A, no additional covariate L1, an
 
 ```{r}
 data_test1 <- simple1(1000, c(1,2,3), c(0.2,0.2,0.2), c(1.2,1.2,1.2))
-
 data_test1[data_test1$ID == 9,]
-
 plotdata <- data_test1[data_test1$ID %in% 1:40,]
-plotdata <- plotdata %>%
-  rbind(data.frame("ID" = unique(plotdata$ID), L0 = unique(plotdata$L0),
-                                    "Time" = 0, "Delta" = "start"))
+my_plot(plotdata)
 
-ggplot(plotdata) +
-  geom_line(aes(x = Time, y = ID, group = ID), color = "grey60", size = 0.7) +  # Light gray lines for each ID
-  geom_point(aes(x = Time, y = ID, shape = factor(Delta), color = factor(Delta)), size = 3) + # Use shapes and colors for Delta
-  theme_minimal(base_size = 15) +  # Increase base font size for readability
-  scale_shape_manual(values = c(8, 20, 20, 20)) +  # Customize shapes for different events
-  scale_color_manual(values = c("darkorange", "blue3", "lightgreen", "darkred")) +  # Customize colors for events
-  labs(
-    title = "Competing Risks Survival Data",
-    x = "Time",
-    y = "Patient ID",
-    shape = "Event Type",
-    color = "Event Type"
-  ) +
-  theme(
-    plot.title = element_text(hjust = 0.5, face = "bold"),  # Center and bold title
-    axis.title.y = element_text(margin = margin(r = 10)),  # Add space to y-axis title
-    axis.title.x = element_text(margin = margin(t = 10)),  # Add space to x-axis title
-    legend.position = "top"  # Place legend on top for easy viewing
-  )
+# Creating a k and m variable
+data_test1 <- data_test1 %>% mutate(k = ave(ID, ID, FUN = seq_along) - 1) 
 
-survfit <- coxph(Surv(Time, Delta == 2) ~ L0, data = data_test1)
+survfit <- coxph(Surv(Time, Delta == 2) ~ L0, data = data_test1[data_test1$k == 0,])
 confint(survfit); 3
-survfit <- coxph(Surv(Time, Delta == 1) ~ L0, data = data_test1)
+
+survfit <- coxph(Surv(Time, Delta == 2) ~ L0, data = data_test1[data_test1$k == 1,])
+confint(survfit); 3
+
+survfit <- coxph(Surv(Time, Delta == 1) ~ L0, data = data_test1[data_test1$k == 0,])
 confint(survfit); 2
 survfit <- coxph(Surv(Time, Delta == 0) ~ L0, data = data_test1)
 confint(survfit); 1
 ```
 
+### Profiling
+
+```{r}
+library(profvis)
+
+profvis({
+  simple1(1000, c(1,2,3), c(0.2,0.2,0.2), c(1.2,1.2,1.2))
+})
+
+```
 
 
-
-
-
+The time is spent on
+- Finding the inverse. But I dont think we can find an analytical expression? 
+- Computing the summed cumulative hazard. Might be an idea to implement a simplified version.
+- Creating dataframes and binding them together. 
 
 
 

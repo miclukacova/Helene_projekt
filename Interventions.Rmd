@@ -15,20 +15,23 @@ source("~/Helene_projekt/Source code/Simple_functions.R")
 ```
 
 
-# 1. Simulate data
+# The simple function
+
+## 1. Simulate data
 
 ```{r}
+n = 10^4
 sim1 <- simple1(2000, c(1,2,3), c(0.1,0.1,0.1), c(1.1,1.1,1.1))
 ```
 
 
-# 2. Fit a Weibull 
+## 2. Fit a Weibull 
 
 ```{r}
 survfit <- survreg(Surv(Time, Delta == 1) ~ L0, data = sim1, dist='weibull')
 ```
 
-# 3. Estimate parameters
+## 3. Estimate parameters
 
 ```{r}
 shape_est <- 1/survfit$scale; 
@@ -37,26 +40,102 @@ scale_est <- 1/exp(survfit$coefficients[1]);
 scale_est; 0.1
 ```
 
-# 4. Simulate new data using the estimated parameters
+## 4. Simulate new data using the estimated parameters
 
 ```{r}
-sim_obs <- simple1(3000, c(1,2,3), rep(scale_est, 3), rep(shape_est, 3))
+sim_obs <- simple1(n, c(1,2,3), rep(scale_est, 3), rep(shape_est, 3))
 ```
 
-# 5. Simulate new data under intervention
+## 5. Simulate new data under intervention
 
 We intervene by setting $L0 = 0$
 
 ```{r}
-sim_int <- simple1(3000, rep(0,3), rep(scale_est, 3), rep(shape_est, 3))
+sim_int <- simple1(n, rep(0,3), rep(scale_est, 3), rep(shape_est, 3))
 ```
 
-# 6. Estimate average causal effects
+## 6. Estimate average causal effects
 
 ```{r}
 mean(sim_obs[sim_obs$Delta == 0,]$Time) - mean(sim_int[sim_int$Delta == 0,]$Time)
 mean(sim_obs[sim_obs$Delta == 1,]$Time) - mean(sim_int[sim_int$Delta == 1,]$Time)
 mean(sim_obs[sim_obs$Delta == 2,]$Time) - mean(sim_int[sim_int$Delta == 2,]$Time)
 ```
+# An intervention on treatment
+
+## 1. Simulate data
+
+```{r}
+n = 10^4
+eta <- c(0.1, 0.1, 0.1, 0.1)
+nu <- c(1.1, 1.1, 1.1, 1.1)
+# Effect on Operation
+beta0 <- c(3, 0, 1, 9)
+# Effect on Censoring
+beta1 <- c(0, 0, -1, 5)
+# Effect on Death
+beta2 <- c(3, 0, 1, 1)
+# Effect on time varying covariate
+beta3 <- c(3, 0, -1, 0.5)
+beta <- cbind(beta0, beta1, beta2, beta3)
+term_deltas <- c(1, 2)
+
+at_risk2 <- function(x, k, m) {
+  # If you have not died yet or been censored yet, you are at risk for dying or being censored
+  if(x == 1 | x == 2) return(1)
+  # You are only at risk for an operation if you have not had an operation yet
+  else if(x == 0) return(as.numeric(k == 0 | (k == 1 & m == 1)))
+  # You are only at risk for a change in the covariate process if you have not had a change yet
+  else return(as.numeric(m == 0))
+}
+
+sim1 <- sur_sim(4000, beta, eta, nu, at_risk2, term_deltas) %>%
+  mutate(k = ave(ID, ID, FUN = seq_along) - 1)
+```
 
 
+## 2. Fit a Weibull 
+
+```{r}
+survfit0 <- survreg(Surv(Time, Delta == 0) ~ L0 + A + L1, data = sim1[sim1$k == 0,], dist='weibull')
+survfit1 <- survreg(Surv(Time, Delta == 1) ~ L0 + A + L1, data = sim1[sim1$k == 0,], dist='weibull')
+survfit2 <- survreg(Surv(Time, Delta == 2) ~ L0 + A + L1, data = sim1[sim1$k == 0,], dist='weibull')
+survfit3 <- survreg(Surv(Time, Delta == 3) ~ L0 + A + L1, data = sim1[sim1$k == 0,], dist='weibull')
+```
+
+## 3. Estimate parameters
+
+```{r}
+nu_est <- c(1/survfit0$scale, 1/survfit1$scale, 1/survfit2$scale, 1/survfit3$scale) 
+nu_est; 1.1
+eta_est <- c(1/exp(survfit0$coefficients[1]), 1/exp(survfit1$coefficients[1]), 
+             1/exp(survfit2$coefficients[1]), 1/exp(survfit3$coefficients[1]))
+eta_est; 0.1
+```
+
+## 4. Simulate new data using the estimated parameters
+
+```{r}
+sim_obs <- sur_sim(N = n, beta = beta, eta = eta_est, nu = nu_est, at_risk = at_risk2,
+                   term_deltas = term_deltas)
+```
+
+## 5. Simulate new data under intervention
+
+We intervene by setting the effect of treatment to 0. 
+
+```{r}
+betas_int <- beta
+betas_int[3,] <- rep(0,4)
+
+sim_int <- sur_sim(N = n, beta = betas_int, eta = eta_est, nu = nu_est, at_risk = at_risk2,
+                   term_deltas = term_deltas)
+```
+
+## 6. Estimate average causal effects
+
+```{r}
+mean(sim_obs[sim_obs$Delta == 0 & sim_obs$A == 1,]$Time) - mean(sim_int[sim_int$Delta == 0,]$Time)
+mean(sim_obs[sim_obs$Delta == 1 & sim_obs$A == 1,]$Time) - mean(sim_int[sim_int$Delta == 1,]$Time)
+mean(sim_obs[sim_obs$Delta == 2 & sim_obs$A == 1,]$Time) - mean(sim_int[sim_int$Delta == 2,]$Time)
+```
