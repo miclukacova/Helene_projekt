@@ -1,0 +1,309 @@
+---
+title: 'Simulation study: Cause Specific Hazards'
+output: html_document
+date: "2024-10-04"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# Libraries
+library(gridExtra)
+library(tidyverse)
+```
+
+
+# Competing risk
+
+Simulation of covariates to time 0:
+
+```{r}
+n <- 1700
+
+X0 <- rbinom(n, 1, 0.1627)
+X1 <- rpois(n, 35)
+L0 <- cbind(X0, X1)
+
+# Effekt
+alpha <- c(0, 0)
+beta <- c(0.5816, -0.1)
+```
+
+Hazard functions
+
+```{r}
+# Parameters
+lambda <- 0.0271
+v <- 1.3841
+
+# Specify hazard functions
+weib_haz <- function(t) lambda * v * t ^ (v - 1)
+weib_cum_haz <- function(t) lambda * t ^ v 
+
+# Cause specific hazard functions
+haz1 <- function(t) weib_haz(t) * exp(L0 %*% alpha)
+haz2 <- function(t) weib_haz(t) * exp(L0 %*% beta)
+```
+
+Distribution function and inverse distribution function
+
+```{r}
+# CDF of time to any event T
+F_func <- function(t, x) {
+  1 - exp( - (weib_cum_haz(t) * exp(t(alpha) %*% x) + 
+            weib_cum_haz(t) * exp(t(beta) %*% x)))
+}
+
+# Inverse of the distribution function
+
+inverse_F <- function(p, x, lower_bound = 0, upper_bound = 100) {
+  # Define the root-finding function (F(t) - p)
+  root_function <- function(t) {
+    F_func(t, x) - p
+  }
+  # Use uniroot to find the value of t such that F(t) = y
+  result <- uniroot(root_function, lower = lower_bound, upper = upper_bound)
+  
+  # Return the value of t
+  return(result$root)
+}
+```
+
+Simulating time to event variables
+
+```{r}
+# Simulating uniform random variables
+Z <- runif(n)
+# Simulating event times
+Ts <-  numeric(n)
+for(i in 1:n){
+  Ts[i] <- inverse_F(p = Z[i], x = L0[i,])
+}
+
+# Simulating censoring
+censoring_time <- rweibull(n, 1.3841, 1/0.0271)
+# The event variable
+event <- ifelse(Ts <= censoring_time, 1, 0)
+```
+
+Simulating the cause
+
+```{r}
+# The probability of cause of event being 1
+p1 <- haz1(Ts) / (haz1(Ts) + haz2(Ts))
+
+cause_type <- ifelse(event == 1, rbinom(n, 1, 1 - p1) + 1, 0) # 1 indicates cause 1, 2 indicates cause of event being 2
+
+# Cause specific event times
+T1 <- Ts[cause_type == 1]
+T2 <- Ts[cause_type == 2]
+```
+
+Plots of distribution of evnt times
+
+```{r}
+plot_1 <- ggplot(data = data.frame(T1 = T1), aes(x = T1, y = ..density..)) + 
+  geom_histogram(binwidth = 1, fill = "blue", alpha = 0.5) + 
+  theme_minimal()+
+  labs(title = "Cause 1")
+
+plot_2 <- ggplot(data = data.frame(T2 = T2), aes(x = T2, y = ..density..)) + 
+  geom_histogram(binwidth = 1, fill = "blue", alpha = 0.5) + 
+  theme_minimal()+
+  labs(title = "Cause 2")
+
+grid.arrange(plot_1, plot_2, ncol = 2)
+```
+
+Output of function
+
+```{r}
+tibble(
+  Id = n,
+  X0 = X0,
+  X1 = X1,
+  "Time to event" = Ts,
+  "Cause" = cause_type
+)
+```
+
+
+# Simulating data with a non-terminal event
+
+We simulate with number of individuals
+
+```{r}
+N <- 100
+```
+
+Shape and scale parameter
+
+```{r}
+eta <- 0.1
+nu <- 1.2
+```
+
+Intensities (for $x = a,d,c$)
+
+```{r}
+# Effects
+alpha <- c("a" = 0.1, "d" = 0.2, "c" = 0.3)
+
+
+lambda <- function(t, x, k) {
+  eta * nu * t ^ (nu - 1) * phi(t, x, k)
+}
+
+phi <- function(t, x, k) {
+  if(x == "a" & k == 2){
+    return(0)
+  }
+  exp(L0 * alpha[x])
+}
+```
+
+Summed cumulative hazard for waiting times
+
+```{r}
+sum_cum_haz <- function(u, t, k) {
+  term <- eta * (phi(t,"a",k) + phi(t, "d", k) + phi(t, "c", k))
+  term * ((t + u) ^ nu - t ^ nu)
+}
+
+sum_cum_haz_inv <- function(u, t, k) {
+  term <- eta * (phi(t,"a",k) + phi(t, "d", k) + phi(t, "c", k))
+  ((u + term * t ^ nu) / term ) ^ (1/nu) - t
+}
+```
+
+Probabilities of event type
+
+```{r}
+probs <- function(t, k){
+  summ <- phi(t,"a",k) + phi(t, "d", k) + phi(t, "c", k)
+  c(phi(t, "a", k) / summ, phi(t, "d", k) / summ, phi(t, "c", k) / summ)
+} 
+```
+
+Simulation
+
+```{r}
+res <- tibble(ID = numeric(), L0 = numeric(), Time = numeric(), Delta = numeric())
+
+set.seed(98)
+
+for(j in 1:N){
+  
+  # Draw
+  L0 <- runif(1)
+  
+  # Initialize
+  T_k1 <- 0
+  Delta <- 0
+  
+  # Iterate
+  
+  Ts <- c()
+  Deltas <- c()
+  k <- 1
+  
+  while(Delta == 0){
+    V <- runif(1)
+    W_k1 <- sum_cum_haz_inv(-log(V), L0, k)
+    T_k1 <- T_k1 + W_k1
+    Ts[k] <- T_k1
+    Deltas[k] <- sample(c(0,1,2), size = 1, prob = probs(T_k1, k))
+    print(probs(T_k1, k))
+    Delta <- Deltas[k]
+    k <- k + 1
+  }
+  
+  jth_res <- tibble(ID = rep(j, length(Ts)), 
+                    L0 = rep(L0,length(Ts)), 
+                    Time = Ts, 
+                    Delta = Deltas) 
+  res <- bind_rows(res, jth_res)
+}
+
+res
+
+table(res$Delta)
+```
+
+# Writing a simulation function
+
+We create a simulation function that is a function of number of individuals $N$, the effect of the baseline covariate on the different intensities $\alpha \in \mathbb{R}^3$, the shape and scale parameter $\eta$ and $\nu$. 
+
+```{r}
+N <- 100
+eta <- 0.1
+nu <- 1.2
+alpha <- c("a" = 0.1, "d" = 0.2, "c" = 0.3)
+
+sur_sim <- function(N, alpha, eta, nu) {
+  
+  # Intensities
+
+  phi <- function(t, x, k) {
+    if(x == "a" & k == 2){
+      return(0)
+    }
+    exp(L0 * alpha[x])
+  }
+  
+  # Inverse Summed Cumulative hazard
+
+  sum_cum_haz_inv <- function(u, t, k) {
+    term <- eta * (phi(t,"a",k) + phi(t, "d", k) + phi(t, "c", k))
+    ((u + term * t ^ nu) / term ) ^ (1/nu) - t
+  }
+  
+  # Event probabilities
+  probs <- function(t, k){
+    summ <- phi(t,"a",k) + phi(t, "d", k) + phi(t, "c", k)
+    c(phi(t, "a", k) / summ, phi(t, "d", k) / summ, phi(t, "c", k) / summ)
+  }
+  
+  # Simulation
+  res <- tibble(ID = numeric(), L0 = numeric(), Time = numeric(), Delta = numeric())
+
+  for(j in 1:N){
+    
+    # Draw
+    L0 <- runif(1)
+    
+    # Initialize
+    T_k1 <- 0
+    Delta <- 0
+    
+    # Iterate
+    Ts <- c()
+    Deltas <- c()
+    k <- 1
+    
+    while(Delta == 0){
+      V <- runif(1)
+      W_k1 <- sum_cum_haz_inv(-log(V), T_k1, k)
+      T_k1 <- T_k1 + W_k1
+      Ts[k] <- T_k1
+      Deltas[k] <- sample(c(0,1,2), size = 1, prob = probs(T_k1, k))
+      Delta <- Deltas[k]
+      k <- k + 1
+    }
+    
+    jth_res <- tibble(ID = rep(j, length(Ts)), 
+                      L0 = rep(L0,length(Ts)), 
+                      Time = Ts, 
+                      Delta = Deltas) 
+    res <- bind_rows(res, jth_res)
+  }
+  return(res)
+}
+```
+
+Trying out the new simulation function
+
+```{r}
+sur_sim(N, alpha, eta, nu)
+```
+
+

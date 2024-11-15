@@ -10,8 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(gridExtra)
 library(tidyverse)
 library(survival)
-source("~/Helene_projekt/Source code/sim_surv.R")
-source("~/Helene_projekt/Source code/Simple_functions.R")
+library(mysimsurv)
 ```
 
 ### Notation
@@ -88,10 +87,6 @@ my_plot(data2)
 data3 <- sur_sim(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk1, 
         term_deltas = c(0,1,2,3))
 my_plot(data3)
-
-#survsim::sur_sim(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk_op, 
-#        term_deltas = term_deltas)
-
 ```
 
 ### Testing out the simulation function
@@ -197,8 +192,6 @@ The time is spent on
 - Finding the inverse. But I dont think we can find an analytical expression? 
 - Computing the summed cumulative hazard. Might be an idea to implement a simplified version.
 - Creating dataframes and binding them together. 
-
-
 
 
 
