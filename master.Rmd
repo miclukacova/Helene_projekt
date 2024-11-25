@@ -7,54 +7,21 @@ date: "2024-10-18"
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 # Libraries
-library(gridExtra)
-library(tidyverse)
+library(data.table)
 library(survival)
 library(rtmle)
 ```
 
-### Notation
+## Simulationg operation data
 
-We use the following notation. 
-
-$x \in \{1,...,m}$ denotes the event type. $x=0$ corresponds to the operation event, $x=1$ to the censoring event, $x=2$ to the death event, $x = 3$ corresponds to a change in the covariate process (e.g. a worsening in condition). 
-
-$k$ counts the number of events.
-
-$L$ is an indicator for a change in the covariate process.  
-
-### At risk functions
-
-At risk functions for common settings.
+Using the wrapper
 
 ```{r}
-# Survival and competing at risk function
-# You are only at risk until some event happens
-at_risk1 <- function(x, k, L) as.numeric(k == 0)
-
-# Operation setting at risk function
-at_risk2 <- function(x, k, L) {
-  # If you have not died yet or been censored yet, you are at risk for dying or being censored
-  if(x == 1 | x == 2) return(1)
-  # You are only at risk for an operation if you have not had an operation yet
-  else if(x == 0) return(as.numeric(k == 0 | (k == 1 & L == 1)))
-  # You are only at risk for a change in the covariate process if you have not had a change yet
-  else return(as.numeric(L == 0))
-}
+data <- sim_op_data(50)
+plot_event_data(data) 
 ```
 
-### Simulation function
-
-The simulation function is a function of
-- Number of individuals: `N`.
-
-- The effect of the baseline covariates and $k$ and on the different intensities: $\beta^x \in \mathbb{R}^{4}$ where $x \in X$. This input, `beta`, should be given as a matrix where each column corresponds to an event $x \in X$. The first row is the effect of the baseline covariate $L_0$, the second row is the effect of $k$, the third row is the effect of treatment $A$, and the fourth row is the effect of time varying covariate $L_1$. 
-
-- The shape `eta` and scale `nu` parameters $(\eta^x)_{x \in X} \in \mathbb{R}^{|X|}$ and $(\nu^x)_{x \in X} \in \mathbb{R}^{|X|}$
-
-- The at risk function `at_risk_func`: an indicator function indicating whether the individual is at risk for the event $x$ at time $t$.
-
-- The terminal events `Delta_Term`: a vector of the terminal events.
+Or using the general function
 
 ```{r}
 N <- 100
@@ -62,107 +29,73 @@ eta <- c(0.1, 0.1, 0.1, 0.1)
 nu <- c(1.1, 1.1, 1.1, 1.1)
 # Effect on Operation
 beta0 <- c(3, 0, 1, 3)
-# Effect on Censoring
-beta1 <- c(0, 0, -1, 1)
 # Effect on Death
+beta1 <- c(0, 0, -1, 1)
+# Effect on Censoring
 beta2 <- c(3, 0, 1, 1)
 # Effect on time varying covariate
 beta3 <- c(3, 0, -1, 0.5)
 
 beta <- cbind(beta0, beta1, beta2, beta3)
 
-term_deltas <- c(1, 2)
-
 # Checking whether the simulations work
-data1 <- sim_event_data(N = N, beta = beta, eta = eta, nu = nu)
-plot_event_data(data1) 
-
-data2 <- sim_event_data(N = N, beta = beta[,2:3], eta = eta[2:3], nu = nu[2:3], at_risk = at_risk1, 
-        term_deltas = c(0,1))
-plot_event_data(data2)
-
-data3 <- sim_event_data(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk1, 
-        term_deltas = c(0,1,2,3))
-plot_event_data(data3)
+data <- sim_event_data(N = N, beta = beta, eta = eta, nu = nu)
+plot_event_data(data) 
 ```
 
-### Testing out the simulation function
+## Simulationg survival data
 
-We sanity check the simulation by fitting models and checking that they estimate the effects correctly. We start out with the general model and the recurrent event setting. 
+```{r}
+data <- sim_surv_data(100)
+plot_event_data(data, title = "Survival Data")
+```
+
+
+## Simulating competing risk data
+
+```{r}
+data <- sim_comp_risk_data(100)
+plot_event_data(data, title = "Competing Risk Data")
+```
+
+### Fitting models to the operation setting
 
 ```{r}
 # Generating data
-N <- 2000
-data_test <- sim_event_data(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk2, term_deltas = term_deltas)
-# Creating a k and m variable
-data_test <- data_test %>% mutate(k = ave(ID, ID, FUN = seq_along) - 1) %>% 
-  mutate(m = ave(ID, ID, FUN = seq_along)) 
+N <- 300
+data_test <- sim_op_data(N = N, eta = eta, nu = nu)
 
+# Creating a k variable
+data_test[, k:= ave(ID, ID, FUN = seq_along) - 1]
+data_k0 <- data_test[data_test$k == 0,]
 
-survfit_oper <- coxph(Surv(Time, Delta == 0) ~ L0 + k + A + L1, data = data_test[data_test$k == 0,])
-survfit_cens <- coxph(Surv(Time, Delta == 1) ~ L0 + k + A + L1, data = data_test[data_test$k == 0,])
-survfit_death <- coxph(Surv(Time, Delta == 2) ~ L0 + k + A + L1, data = data_test[data_test$k == 0,])
-survfit_cov <- coxph(Surv(Time, Delta == 3) ~ L0 + k + A + L1, data = data_test[data_test$k == 0,])
+data_k0[, tstart := 0]
+data_k0[, tstop := Time]
+
+data_k1 <- data_test[data_test$k == 1,]
+
+data_k1[, tstart := data_k0[data_k0$ID %in% data_k1$ID,]$tstop]
+data_k1[, tstop := Time]
+
+data_k2 <- data_test[data_test$k == 2,]
+
+data_k2[, tstart := data_k1[data_k1$ID %in% data_k2$ID,]$tstop]
+data_k2[, tstop := Time]
+
+final_data <- rbind(data_k0, data_k1, data_k2)[order(ID)]
+
+#sanity check
+nrow(final_data) == nrow(data_test)
+
+survfit_oper <- coxph(Surv(tstart, tstop, Delta == 0) ~ L0 + k + A + L, data = final_data, cluster = ID)
+survfit_cens <- coxph(Surv(Time, Delta == 1) ~ L0 + k + A + L, data = final_data, cluster = ID)
+survfit_death <- coxph(Surv(Time, Delta == 2) ~ L0 + k + A + L, data = final_data, cluster = ID)
+survfit_cov <- coxph(Surv(Time, Delta == 3) ~ L0 + k + A, data = final_data, cluster = ID)
 confint(survfit_oper); beta0
 confint(survfit_cens); beta1
 confint(survfit_death); beta2
 confint(survfit_cov); beta3
-```
 
-
-
-```{r}
-# Survival setting
-N <- 1000
-data <- sim_surv_data(N = N, beta = matrix(2, ncol = 2, nrow = 2), eta = rep(0.1,2), nu = rep(1.1,2))
-
-ggplot(data) +
-  geom_point(aes(x = L0, y = Time)) +
-  facet_grid(A ~ Delta, labeller = labeller(A = label_both, Delta = label_both))
-
-survfit_death <- coxph(Surv(Time, Delta == 2) ~ L0 + A, data = data)
-confint(survfit_death);
-
-survfit_cens <- coxph(Surv(Time, Delta == 1) ~ L0 + A, data = data)
-confint(survfit_cens);
-```
-
-### Visualizing the simulation results
-
-```{r}
-# Operation setting
-N <- 50
-data1 <- sim_event_data(N = N, beta = beta, eta = eta, nu = nu, at_risk = at_risk2, 
-        term_deltas = term_deltas)
-
-data1[data1$ID == 9,]
-
-plot_event_data(data1)
-```
-
-### Testing out the simple functions
-
-simple1 has no covariate process, no treatment A, no additional covariate L1, and no effect of $k$. 
-
-```{r}
-data_test1 <- simple1(1000, c(1,2,3), c(0.2,0.2,0.2), c(1.2,1.2,1.2))
-data_test1[data_test1$ID == 9,]
-plotdata <- data_test1[data_test1$ID %in% 1:40,]
-plot_event_data(plotdata)
-
-# Creating a k and m variable
-data_test1 <- data_test1 %>% mutate(k = ave(ID, ID, FUN = seq_along) - 1) 
-
-survfit <- coxph(Surv(Time, Delta == 2) ~ L0, data = data_test1[data_test1$k == 0,])
-confint(survfit); 3
-
-survfit <- coxph(Surv(Time, Delta == 2) ~ L0, data = data_test1[data_test1$k == 1,])
-confint(survfit); 3
-
-survfit <- coxph(Surv(Time, Delta == 1) ~ L0, data = data_test1[data_test1$k == 0,])
-confint(survfit); 2
-survfit <- coxph(Surv(Time, Delta == 0) ~ L0, data = data_test1)
-confint(survfit); 1
 ```
 
 ### Profiling
@@ -183,4 +116,25 @@ The time is spent on
 - Creating dataframes and binding them together. 
 
 
+# Old stuff
 
+### Simulation function
+
+The simulation function is a function of
+- Number of individuals: `N`.
+
+- The effect of the baseline covariates and $k$ and on the different intensities: $\beta^x \in \mathbb{R}^{4}$ where $x \in X$. This input, `beta`, should be given as a matrix where each column corresponds to an event $x \in X$. The first row is the effect of the baseline covariate $L_0$, the second row is the effect of $k$, the third row is the effect of treatment $A$, and the fourth row is the effect of time varying covariate $L_1$. 
+
+- The shape `eta` and scale `nu` parameters $(\eta^x)_{x \in X} \in \mathbb{R}^{|X|}$ and $(\nu^x)_{x \in X} \in \mathbb{R}^{|X|}$
+
+- The at risk function `at_risk_func`: an indicator function indicating whether the individual is at risk for the event $x$ at time $t$.
+
+- The terminal events `Delta_Term`: a vector of the terminal events.
+
+
+
+### Notation
+
+We use the following notation. 
+
+$x \in \{1,...,m}$ denotes the event type. $x=0$ corresponds to the operation event, $x=1$ to the censoring event, $x=2$ to the death event, $x = 3$ corresponds to a change in the covariate process (e.g. a worsening in condition). 
