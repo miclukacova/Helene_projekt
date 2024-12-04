@@ -20,16 +20,7 @@ theme_set(theme_bw())
 
 # The Simulation Function
 
-## Simulationg operation data
-
-Using the wrapper
-
-```{r}
-data <- sim_op_data(50)
-plot_event_data(data) 
-```
-
-Or using the general function
+We start out by specifying relevant quantities:
 
 ```{r}
 N <- 100
@@ -43,16 +34,28 @@ beta1 <- c(0, 0, -1, 1)
 beta2 <- c(3, 0, 1, 1)
 # Effect on time varying covariate
 beta3 <- c(3, 0, -1, 0.5)
-
 beta <- cbind(beta0, beta1, beta2, beta3)
+```
 
+## Simulationg operation data
+
+We can use the function `sim_op_data` to simulate data in the operation setting. 
+
+```{r}
+data <- sim_op_data(N = N, beta = beta, eta = eta, nu = nu)
+plot_event_data(data) 
+```
+
+This corresponds to using the general function `vec_sim_event_data` in the following way.
+
+```{r}
 # Checking whether the simulations work
 data <- vec_sim_event_data(N = N, beta = beta, eta = eta, nu = nu)
 plot_event_data(data) 
 ```
 
 ## Simulationg survival data
-Simulation and plot
+The function `sim_surv_data` simulates survival data. It is a wrapper of the function `vec_sim_event_data`.
 
 ```{r}
 data <- sim_surv_data(100)
@@ -73,6 +76,8 @@ survfit_cens <- coxph(Surv(Time, Delta == 2) ~ L0 + A, data = data)
 coefficients(survfit_cens); beta[,2]
 confint(survfit_cens)
 ```
+
+Seems to estimate correctly. 
 
 ## Simulating competing risk data
 
@@ -100,7 +105,11 @@ coefficients(survfit_cens); beta[,3]
 confint(survfit_cens)
 ```
 
+Also seems to estimate correctly. 
+
 ### Fitting models to the operation setting
+
+**THIS IS WHERE WE SEE THAT SOMETHING IS WRONG**
 
 ```{r}
 # Generating data
@@ -342,25 +351,4 @@ mean(sim_obs[sim_obs$Delta == 1,]$Time) - mean(sim_int[sim_int$Delta == 1,]$Time
 mean(sim_obs[sim_obs$Delta == 2,]$Time) - mean(sim_int[sim_int$Delta == 2,]$Time)
 ```
 
-# Old stuff
-
-### Simulation function
-
-The simulation function is a function of
-- Number of individuals: `N`.
-
-- The effect of the baseline covariates and $k$ and on the different intensities: $\beta^x \in \mathbb{R}^{4}$ where $x \in X$. This input, `beta`, should be given as a matrix where each column corresponds to an event $x \in X$. The first row is the effect of the baseline covariate $L_0$, the second row is the effect of $k$, the third row is the effect of treatment $A$, and the fourth row is the effect of time varying covariate $L_1$. 
-
-- The shape `eta` and scale `nu` parameters $(\eta^x)_{x \in X} \in \mathbb{R}^{|X|}$ and $(\nu^x)_{x \in X} \in \mathbb{R}^{|X|}$
-
-- The at risk function `at_risk_func`: an indicator function indicating whether the individual is at risk for the event $x$ at time $t$.
-
-- The terminal events `Delta_Term`: a vector of the terminal events.
-
-
-
-### Notation
-
-We use the following notation. 
-
-$x \in \{1,...,m}$ denotes the event type. $x=0$ corresponds to the operation event, $x=1$ to the censoring event, $x=2$ to the death event, $x = 3$ corresponds to a change in the covariate process (e.g. a worsening in condition). 
+. 
