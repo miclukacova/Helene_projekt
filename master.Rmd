@@ -46,16 +46,16 @@ data <- sim_op_data(N = N, beta = beta, eta = eta, nu = nu)
 plot_event_data(data) 
 ```
 
-This corresponds to using the general function `vec_sim_event_data` in the following way.
+This corresponds to using the general function `sim_event_data` in the following way.
 
 ```{r}
 # Checking whether the simulations work
-data <- vec_sim_event_data(N = N, beta = beta, eta = eta, nu = nu)
+data <- sim_event_data(N = N, beta = beta, eta = eta, nu = nu)
 plot_event_data(data) 
 ```
 
 ## Simulationg survival data
-The function `sim_surv_data` simulates survival data. It is a wrapper of the function `vec_sim_event_data`.
+The function `sim_surv_data` simulates survival data. It is a wrapper of the function `sim_event_data`.
 
 ```{r}
 data <- sim_surv_data(100)
@@ -159,43 +159,14 @@ ggplot(data = CIs)+
 
 ```
 
-## Vectorizing improves the speed
-
-### Benchmarking
-
-```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=10, fig.height=4, fig.align='center'}
-set.seed(4027)
-
-sim_bench <- bench::press(
-  n = 2^(5:10),
-  {
-    bench::mark(
-      "Vectorized" =  vec_sim_event_data(n),
-      "Naive" = sim_event_data(n),
-      check = FALSE
-    )
-  }
-)
-
-sim_bench <- data.table(sim_bench)
-sim_bench[,expr := as.character(expression)] 
-sim_bench[,median := as.numeric(median)]
-
-ggplot(data = sim_bench,aes(n, median, color = expr)) + 
-  geom_point() + scale_y_log10() +
-  geom_line() + labs(y = "time (ms)")
-```
-
-
-
-### Profiling
+## Profiling
 
 ```{r}
 library(profvis)
 
 profvis({
   
-  vec_sim_event_data <- function(N,                  # Number of individuals
+  sim_event_data <- function(N,                  # Number of individuals
                            beta = NULL,            # Effects
                            eta = rep(0.1,4),       # Shape parameters
                            nu = rep(1.1,4),        # Scale parameters
@@ -229,12 +200,12 @@ profvis({
     }
   
     lambda <- function(t, i) {
-      at_risk(i) * eta * nu * t ^ (nu - 1) * phi(i)
+      at_risk(i, L, k) * eta * nu * t ^ (nu - 1) * phi(i)
     }
   
     # Summed cumulative hazard
     sum_cum_haz <- function(u, t, i) {
-      sum(at_risk(i) * eta * phi(i) * ((t + u) ^ nu - t ^ nu))
+      sum(at_risk(i, L, k) * eta * phi(i) * ((t + u) ^ nu - t ^ nu))
     }
   
     # Inverse summed cumulative hazard function
@@ -292,7 +263,7 @@ profvis({
     return(res[order(ID)])
   }
   
-  vec_sim_event_data(1000)
+  sim_event_data(1000)
 })
 
 ```
@@ -309,7 +280,7 @@ The time is spent on
 1. Simulate
 
 ```{r}
-N <- 5000
+N <- 1000
 beta <- matrix(rnorm(16,0,1), ncol = 4, nrow = 4)
 data_int <- sim_op_data(N = N, beta = beta)
 ```
@@ -333,12 +304,29 @@ scale_est <- c(1/exp(survfit_op$coefficients[1]), 1/exp(survfit_death$coefficien
                1/exp(survfit_cens$coefficients[1]), 1/exp(survfit_cov$coefficients[1])) 
 scale_est; 0.1
 ```
-4. Simulate new data using the estimated parameters - without censoring (?)
+4. Simulate new data using the estimated parameters - without censoring
 
-To do: implement correctly!
+The without censoring, can be implemented in two ways, setting nu/eta = 0 for the censorign process or modifying the at risk function for censoring.
+
+A possible intervention would be to increase the number of operations. Here we do this by adding the constant 1 to all beta coefficients in the operation intensity. 
 
 ```{r}
-sim_obs <- sim_op_data(N = N, beta = beta, eta = scale_est, nu = shape_est)
+at_risk_int <- function(i, L, k) {return(c(
+  # You are only at risk for an operation if you have not had an operation yet
+  as.numeric(k == 0 | (k == 1 & L[i] == 1)),
+  # If you have not died yet you are at risk for dying
+  1,
+  # In the intervention scenario, you cannot be censored
+  0,
+  # You are only at risk for a change in the covariate process if you have not had a change yet
+  as.numeric(L[i] == 0)))}
+
+beta_int <- beta
+# Increasing the number of operations
+beta_int[,1] <- beta_int[,1] + 1
+
+sim_int <- sim_event_data(N = 1000, beta = beta_int, eta = scale_est, nu = shape_est, at_risk = at_risk_int)
+plot_event_data(sim_int)
 ```
 
 5. Estimate causal effects
@@ -346,9 +334,12 @@ sim_obs <- sim_op_data(N = N, beta = beta, eta = scale_est, nu = shape_est)
 To do: implement correctly!
 
 ```{r}
-mean(sim_obs[sim_obs$Delta == 0,]$Time) - mean(sim_int[sim_int$Delta == 0,]$Time)
-mean(sim_obs[sim_obs$Delta == 1,]$Time) - mean(sim_int[sim_int$Delta == 1,]$Time)
-mean(sim_obs[sim_obs$Delta == 2,]$Time) - mean(sim_int[sim_int$Delta == 2,]$Time)
+mean(data_int[data_int$Delta == 0,]$Time) - mean(sim_int[sim_int$Delta == 0,]$Time)
+# You are under operation later
+mean(data_int[data_int$Delta == 1,]$Time) - mean(sim_int[sim_int$Delta == 1,]$Time)
+# You die much later
+mean(data_int[data_int$Delta == 3,]$Time) - mean(sim_int[sim_int$Delta == 3,]$Time)
+# There is a change in your covariate process a bit sooner
 ```
 
 . 
