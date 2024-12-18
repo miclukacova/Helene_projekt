@@ -1,5 +1,5 @@
 ---
-title: 'Simulation Study: General Setting'
+title: 'Simulation Study: Two Settings'
 output: html_document
 date: "2024-10-18"
 ---
@@ -18,296 +18,69 @@ theme_set(theme_bw())
 ```
 
 
-# The Simulation Function
-
-We start out by specifying relevant quantities:
-
-```{r}
-N <- 100
-eta <- c(0.1, 0.1, 0.1, 0.1)
-nu <- c(1.1, 1.1, 1.1, 1.1)
-# Effect on Operation
-beta0 <- c(3, 0, 1, 3)
-# Effect on Death
-beta1 <- c(0, 0, -1, 1)
-# Effect on Censoring
-beta2 <- c(3, 0, 1, 1)
-# Effect on time varying covariate
-beta3 <- c(3, 0, -1, 0.5)
-beta <- cbind(beta0, beta1, beta2, beta3)
-```
-
-## Simulationg operation data
-
-We can use the function `sim_op_data` to simulate data in the operation setting. 
-
-```{r}
-data <- sim_op_data(N = N, beta = beta, eta = eta, nu = nu)
-plot_event_data(data) 
-```
-
-This corresponds to using the general function `sim_event_data` in the following way.
-
-```{r}
-# Checking whether the simulations work
-data <- sim_event_data(N = N, beta = beta, eta = eta, nu = nu)
-plot_event_data(data) 
-```
-
-Model fit
-
-```{r}
-# Generating data
-N <- 10^4
-beta <- matrix(rnorm(16,0,0.75), ncol = 4, nrow = 4)
-data_test <- sim_op_data(N = N, beta = beta)
-
-# Transform data into tstart tstop format
-data_int <- trans_int_data(data_test)
-
-data_int[, at_risk_oper := as.numeric(A == 0)]
-data_int[, at_risk_cov := as.numeric(L == 0)]
-
-
-# Fit models
-survfit_oper <- coxph(Surv(tstart, tstop, Delta == 0) ~ L0 + A0 + L, data = data_int[at_risk_oper == 1], cluster = ID)
-survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0 + A + A0 + L, data = data_int, cluster = ID)
-survfit_cens <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A + A0 + L, data = data_int, cluster = ID)
-survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0 + A + A0, data = data_int[at_risk_cov == 1], cluster = ID)
-confint(survfit_oper); c(beta[1,1], beta[3,1], beta[4,1])
-confint(survfit_death); beta[,2]
-confint(survfit_cens); beta[,3]
-confint(survfit_cov); beta[1:3,4]
-
-# Visualizing the confidence intervals
-
-CIs <- cbind("Par" = c("oper_L0", "oper_A", "oper_A0", "death_L0", "death_A", "death_A0", "death_L",
-                       "cens_L0", "cens_A", "cens_A0", "cens_L","cov_L0", "cov_A", "cov_A0" ),
-           rbind(confint(survfit_oper), confint(survfit_death), confint(survfit_cens),confint(survfit_cov)))
-
-rownames(CIs) <- NULL
-colnames(CIs) <- c("Par", "Lower", "Upper")
-CIs <- data.table(CIs)
-
-CIs[, True_val := c(beta[1,1], beta[3,1], beta[4,1],
-               beta[,2],
-               beta[,3],
-               beta[1:3,4])]
-
-CIs$Lower <- as.numeric(CIs$Lower)
-CIs$Upper <- as.numeric(CIs$Upper)
-
-
-ggplot(data = CIs)+
-  geom_point(aes(y = Par, x = Lower))+
-  geom_point(aes(y = Par, x = Upper))+
-  geom_point(aes(y = Par, x = True_val, col = "Estimate"))+
-  scale_color_manual(values = c("Estimate" = "red"))+
-  geom_segment(aes(y = Par, yend = Par, x = Lower, xend = Upper))
-
-```
-
-## Simulationg survival data
-The function `sim_surv_data` simulates survival data. It is a wrapper of the function `sim_event_data`.
-
-```{r}
-data <- sim_surv_data(100)
-plot_event_data(data, title = "Survival Data")
-```
-
-Model fit
-
-```{r}
-beta <- matrix(rnorm(4,0,1), ncol = 2, nrow = 2)
-data <- sim_surv_data(N = 6000, beta = beta)
-
-survfit_death <- coxph(Surv(Time, Delta == 1) ~ L0 + A0, data = data)
-coefficients(survfit_death); beta[,1]
-confint(survfit_death)
-
-survfit_cens <- coxph(Surv(Time, Delta == 2) ~ L0 + A0, data = data)
-coefficients(survfit_cens); beta[,2]
-confint(survfit_cens)
-```
-
-Seems to estimate correctly. 
-
-## Simulating competing risk data
-
-```{r}
-data <- sim_cr_data(50)
-plot_event_data(data, title = "Competing Risk Data")
-```
-
-Model fit
-
-```{r}
-beta <- matrix(rnorm(6,0,1), ncol = 3, nrow = 2)
-data <- sim_cr_data(N = 10000, beta = beta)
-
-survfit_proc1 <- coxph(Surv(Time, Delta == 0) ~ L0 + A0, data = data)
-coefficients(survfit_proc1); beta[,1]
-confint(survfit_proc1)
-
-survfit_proc2 <- coxph(Surv(Time, Delta == 1) ~ L0 + A0, data = data)
-coefficients(survfit_proc2); beta[,2]
-confint(survfit_proc2)
-
-survfit_cens <- coxph(Surv(Time, Delta == 2) ~ L0 + A0, data = data)
-coefficients(survfit_cens); beta[,3]
-confint(survfit_cens)
-```
-
-Also seems to estimate correctly. 
-
-## Profiling
-
-```{r}
-library(profvis)
-
-profvis({
-  sim_event_data <- function(N,                  # Number of individuals
-                             beta = NULL,            # Effects
-                             eta = rep(0.1,4),       # Shape parameters
-                             nu = rep(1.1,4),        # Scale parameters
-                             at_risk = NULL,         # Function defining the setting
-                             term_deltas = c(1,2)    # Terminal events
-                             )
-    {
-    ID <- NULL
-    if(is.null(beta)){
-      beta <- matrix(0, nrow = 4, ncol = 4)
-    }
-  
-  
-    if(is.null(at_risk)){
-      at_risk <- function(i, L, A) {
-        return(c(
-          # You are only at risk for an operation if you have not had an operation yet
-          as.numeric(A[i] == 0),
-          # If you have not died yet or been censored yet, you are at risk for dying or being censored
-          1,1,
-          # You are only at risk for a change in the covariate process if you have not had a change yet
-          as.numeric(L[i] == 0)))
-    }}
-  
-    # Events
-    x <- 1:ncol(beta)
-  
-    # Intensities
-    phi <- function(i) {
-      exp(L0[i] * beta[1,] + A[i] * beta[2,] + A0[i] * beta[3,] + L[i] * beta[4,])
-    }
-  
-    lambda <- function(t, i) {
-      at_risk(i, L, A) * eta * nu * t ^ (nu - 1) * phi(i)
-    }
-  
-    # Summed cumulative hazard
-    sum_cum_haz <- function(u, t, i) {
-      sum(at_risk(i, L, A) * eta * phi(i) * ((t + u) ^ nu - t ^ nu))
-    }
-  
-    # Inverse summed cumulative hazard function
-    inverse_sc_haz <- function(p, t, i, lower_bound = 10^-15, upper_bound = 100) {
-      root_function <- function(u) sum_cum_haz(u, t, i) - p
-      stats::uniroot(root_function, lower = lower_bound, upper = upper_bound)$root
-    }
-  
-    # Event probabilities
-    probs <- function(t, i){
-      probs <- lambda(t, i)
-      summ <- sum(probs)
-      probs / summ
-    }
-  
-    # Draw
-    L0 <- stats::runif(N)
-    A0 <- stats::rbinom(N, 1, 0.5)
-  
-    # Initialize
-    T_k <- rep(0,N)
-    Delta <- -1
-    L <- rep(0, N)
-    A <- rep(0, N)
-    alive <- 1:N
-  
-    res <- data.table()
-  
-    while(length(alive) != 0){
-      # Simulate time
-      V <- stats::runif(N)
-      W <- sapply(alive, function(i) inverse_sc_haz(-log(V)[i], T_k[i], i))
-      T_k[alive] <- T_k[alive] + W
-  
-      # Simulate event
-      Deltas <- sapply(alive, function(i) sample(x, size = 1, prob = probs(T_k[i], i)) - 1)
-  
-      kth_event <- data.table(ID = alive,
-                 Time = T_k[alive],
-                 Delta = Deltas,
-                 L0 = L0[alive],
-                 L = L[alive],
-                 A0 = A0[alive],
-                 A = A[alive])
-  
-      res <- rbind(res, kth_event)
-  
-      # Update treatment process and covariate change indicators
-      A[alive][Deltas == 0] <- 1
-      L[alive][Deltas == 3] <- 1
-  
-      # Who is still alive and uncensored?
-      alive <- alive[! Deltas %in% term_deltas]
-    }
-    setkey(res, ID)
-    return(res)
-  }
-  
-  sim_event_data(1000)
-})
-
-```
-
-
-The time is spent on
-- Finding the inverse. But I dont think we can find an analytical expression? 
-- Using sapply
-- Computing the phi function
-- Look into implementing parts in C++
+To do:
+- proportion af censoreringer, død, osv.
+- followup period
 
 # Two Settings
 
 ## Setting 1 ("Operation")
 
 ```{r}
-beta1 <- matrix(ncol = 4, nrow = 4)
-
-# A0 is 0
-beta1[3,] <- 0
-# L0 øger ssh for L=1 og A=1
-beta1[1,c(1,4)] <- c(1,1)
-# L=1 øger ssh for A=1
-beta1[4,1] <- 1 
-# A=1 nedsætter risiko for død
-beta1[2,2] <- -1
-# L0,L=1 øger risiko for død
-beta1[c(1,4),2] <- 1
-# Censorering afhænger ikke af noget
-beta1[,3] <- 0
-
-# A = 1 spiller ikke nogen rolle for sig selv, siden at begivenheden kun finder sted en enkelt gang
-beta1[2,1] <- 0
-# På samme vis spiller det ikke nogen rolle hvordan L=1 påvirker risiko for L
-beta1[4,4] <- 0
-# Min anategelse: A = 1 nedsætter risiko for L=1
-beta1[2,4] <- 0.5
+set.seed(2964)
+set1_data <- sim_data_setting1(N = 10000)
+set1_data_fu <- sim_data_setting1(N = 10000, followup = 5)
+plot_event_data(set1_data)
+plot_event_data(set1_data_fu)
 ```
+
+## Setting 2 ("T2D diabetes")
 
 ```{r}
 set.seed(2964)
-set1_data <- sim_op_data(N = 1000, beta = beta1)
+set2a_data <- sim_data_setting2(N = 10000, setting = "a")
+set2b_data <- sim_data_setting2(N = 10000, setting = "b")
+set2a_fu_data <- sim_data_setting2(N = 10000, setting = "a", followup = 5)
+set2b_fu_data <- sim_data_setting2(N = 10000, setting = "b", followup = 5)
 ```
+
+
+```{r}
+plot_event_data(set2a_data)
+plot_event_data(set2a_fu_data)
+```
+
+
+### Proportions
+
+```{r}
+summary_sim_event <- function(data) {
+  N <- nrow(data)
+  prop_op <- nrow(data[Delta == 0])/N
+  prop_death <- nrow(data[Delta == 1])/N
+  prop_cens <- nrow(data[Delta == 2])/N
+  prop_fu_cens <- nrow(data[Delta == "C"])/N
+  prop_cov <-  nrow(data[Delta == 3])/N
+  
+  mean_T <- mean(data$Time)
+  max_T <- max(data$Time)
+  
+  return(data.table("Prop Op" = prop_op, "Prop Death" = prop_death, "Prop Cens" = prop_cens, 
+                    "Prop FU Cens" = prop_fu_cens, "Prop Cov" = prop_cov, "Mean Time" = mean_T, 
+                    "Max Time" = max_T))
+}
+```
+
+```{r}
+summary_sim_event(set1_data)
+summary_sim_event(set1_data_fu)
+summary_sim_event(set2a_data)
+summary_sim_event(set2a_fu_data)
+summary_sim_event(set2b_data)
+summary_sim_event(set2b_fu_data)
+```
+
+### Investigating modl misspecifications
 
 ```{r}
 # Transform data into tstart tstop format
@@ -316,60 +89,46 @@ set1_data_int <- trans_int_data(set1_data)
 set1_data_int[, at_risk_oper := as.numeric(A == 0)]
 set1_data_int[, at_risk_cov := as.numeric(L == 0)]
 
-# Fit models
-survfit_oper <- coxph(Surv(tstart, tstop, Delta == 0) ~ L0 + A0 + L, 
+# True models:
+survfit_oper <- coxph(Surv(tstart, tstop, Delta == 0) ~ L0 + L, 
                       data = set1_data_int[at_risk_oper == 1], cluster = ID)
-survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0 + A + A0 + L, 
+survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0 + A + L, 
                        data = set1_data_int, cluster = ID)
-survfit_cens <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A + A0 + L, 
+survfit_cens <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A + L, 
                       data = set1_data_int, cluster = ID)
-survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0 + A + A0, 
+survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0 + A, 
                      data = set1_data_int[at_risk_cov == 1], cluster = ID)
 
-survfit_oper$coefficients; beta1[,1]
-survfit_death$coefficients; beta1[,2]
-survfit_cens$coefficients; beta1[,3]
-survfit_cov$coefficients; beta1[,4]
+# Cox models only with time varying covariate:
+
+survfit_oper1 <- coxph(Surv(tstart, tstop, Delta == 0) ~ L0 + L, 
+                      data = set1_data_int[at_risk_oper == 1], cluster = ID)
+survfit_death1 <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0 + L, 
+                       data = set1_data_int, cluster = ID)
+survfit_cens1 <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + L, 
+                      data = set1_data_int, cluster = ID)
+survfit_cov1 <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0, 
+                     data = set1_data_int[at_risk_cov == 1], cluster = ID)
+
+# Cox models only with operation:
+survfit_oper2 <- coxph(Surv(tstart, tstop, Delta == 0) ~ L0, 
+                      data = set1_data_int[at_risk_oper == 1], cluster = ID)
+survfit_death2 <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0 + A, 
+                       data = set1_data_int, cluster = ID)
+survfit_cens2 <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A, 
+                      data = set1_data_int, cluster = ID)
+survfit_cov2 <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0 + A, 
+                     data = set1_data_int[at_risk_cov == 1], cluster = ID)
+
+
+survfit_oper$coefficients; survfit_oper1$coefficients; survfit_oper2$coefficients
+survfit_death$coefficients; survfit_death1$coefficients; survfit_death2$coefficients
+survfit_cens$coefficients; survfit_cens1$coefficients; survfit_cens2$coefficients
+survfit_cov$coefficients; survfit_cov1$coefficients; survfit_cov2$coefficients
+
 ```
 
-
-## Setting 2 ("T2D diabetes")
-
-```{r}
-beta2 <- matrix(ncol = 4, nrow = 4)
-
-# Ingen A
-beta2[2,] <- 0
-beta2[,1] <- 0
-# L0 øger ssh for L=1
-beta2[1,4] <- 1
-# A0=1 mindsker ssh for L=1
-beta2[3,4] <- -1
-# L0 øger risiko for død
-beta2[1,2] <- 1
-# A0 nedsætter risiko for død
-beta2[3,2] <- -1
-# Det ikke nogen rolle hvordan L=1 påvirker risiko for L
-beta2[4,4] <- 0
-
-# Censorering afhænger ikke af noget (NB. min antagelse)
-beta2[,3] <- 0
-
-# 2a: L=1 sætter risiko for død op 
-beta2a <- beta2
-beta2a[4,2] <- 1
-
-# 2b: risiko for død afhænger ikke af L
-beta2b <- beta2
-beta2b[4,2] <- 0
-```
-
-```{r}
-set.seed(2964)
-set2a_data <- sim_op_data(N = 1000, beta = beta2a)
-set2b_data <- sim_op_data(N = 1000, beta = beta2b)
-```
-
+### Fitting models
 
 ```{r}
 # Transform data into tstart tstop format
@@ -385,9 +144,9 @@ survfit_cens <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A0 + L,
 survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0 + A0, 
                      data = set2a_data_int[at_risk_cov == 1], cluster = ID)
 
-survfit_death$coefficients; beta2a[,2]
-survfit_cens$coefficients; beta2a[,3]
-survfit_cov$coefficients; beta2a[,4]
+survfit_death$coefficients 
+survfit_cens$coefficients 
+survfit_cov$coefficients
 ```
 
 ```{r}
@@ -404,79 +163,63 @@ survfit_cens <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A0 + L,
 survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0 + A0, 
                      data = set2b_data_int[at_risk_cov == 1], cluster = ID)
 
-survfit_death$coefficients; beta2b[,2]
-survfit_cens$coefficients; beta2b[,3]
-survfit_cov$coefficients; beta2b[,4]
+survfit_death$coefficients 
+survfit_cens$coefficients 
+survfit_cov$coefficients
 ```
 
 
-Det hele ser super ud!
+### Proportions
 
-# Interventions
 
-1. Simulate
+Note that we can affect the intensities by:
+
+$$\lambda^x_k(t\, \vert \, \mathcal{F}_{t-}) =  R^x(t,k)  \eta^x \nu^x t^{\nu^x - 1} 
+ \exp(\beta^T Z)$$
+
+changing the value of $\eta^x$. For a follow up time $K$ 
 
 ```{r}
-N <- 10000
-beta <- matrix(rnorm(16,0,0.75), ncol = 4, nrow = 4)
-data_int <- sim_op_data(N = N, beta = beta)
+eta_vals <- rep(0.05, 4)
+incr <- 0.05
+K <- 5
+summaries <- list()
+
+for(i in 1:12){
+  sim <- sim_data_setting2(1000, eta = eta_vals, followup = K)
+  summaries[[i]] <- summary_sim_event(sim)
+  eta_vals[i %% 4] <- eta_vals[i %% 4] + incr
+}
+
+
 ```
 
-2. Fit a Weibull 
 
-```{r}
-data_int[, k:= ave(ID, ID, FUN = seq_along) - 1]
-survfit_op <- survreg(Surv(Time, Delta == 0) ~ L0 + A0 + L, data = data_int, dist='weibull')
-survfit_death <- survreg(Surv(Time, Delta == 1) ~ L0 + A + A0 + L, data = data_int, dist='weibull')
-survfit_cens <- survreg(Surv(Time, Delta == 2) ~ L0 + A + A0 + L, data = data_int, dist='weibull')
-survfit_cov <- survreg(Surv(Time, Delta == 3) ~ L0 + A + A0, data = data_int, dist='weibull')
-```
 
-3. Estimate parameters
 
-```{r}
-shape_est <- c(1/survfit_op$scale, 1/survfit_death$scale, 1/survfit_cens$scale, 1/survfit_cov$scale) 
-shape_est; 1.1
-scale_est <- c(1/exp(survfit_op$coefficients[1]), 1/exp(survfit_death$coefficients[1]), 
-               1/exp(survfit_cens$coefficients[1]), 1/exp(survfit_cov$coefficients[1])) 
-scale_est; 0.1
-```
-4. Simulate new data using the estimated parameters - without censoring
 
-The without censoring, can be implemented in two ways, setting nu/eta = 0 for the censorign process or modifying the at risk function for censoring.
 
-A possible intervention would be to increase the number of operations. Here we do this by adding the constant 1 to all beta coefficients in the operation intensity. 
 
-```{r}
-at_risk_int <- function(i, L, A) {return(c(
-  # You are only at risk for an operation if you have not had an operation yet
-  as.numeric(A[i] == 0),
-  # If you have not died yet you are at risk for dying
-  1,
-  # In the intervention scenario, you cannot be censored
-  0,
-  # You are only at risk for a change in the covariate process if you have not had a change yet
-  as.numeric(L[i] == 0)))}
 
-beta_int <- beta
-# Increasing the number of operations
-beta_int[,1] <- beta_int[,1] + 1
 
-sim_int <- sim_event_data(N = 1000, beta = beta_int, eta = scale_est, nu = shape_est, at_risk = at_risk_int)
-plot_event_data(sim_int)
-```
 
-5. Estimate causal effects
 
-To do: implement correctly!
 
-```{r}
-mean(data_int[data_int$Delta == 0,]$Time) - mean(sim_int[sim_int$Delta == 0,]$Time)
-# You are under operation sooner
-mean(data_int[data_int$Delta == 1,]$Time) - mean(sim_int[sim_int$Delta == 1,]$Time)
-# You die sooner
-mean(data_int[data_int$Delta == 3,]$Time) - mean(sim_int[sim_int$Delta == 3,]$Time)
-# There is a change in your covariate process sooner
-```
 
-. 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
