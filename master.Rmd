@@ -10,17 +10,12 @@ knitr::opts_chunk$set(echo = TRUE)
 library(data.table)
 library(survival)
 #install.packages("rtmle")
-#devtools::install_github("tagteam/rtmle")
+devtools::install_github("tagteam/rtmle")
 library(rtmle)
 library(ggplot2)
 library(microbenchmark)
 theme_set(theme_bw())
 ```
-
-
-To do:
-- proportion af censoreringer, død, osv.
-- followup period
 
 # Two Settings
 
@@ -28,8 +23,8 @@ To do:
 
 ```{r}
 set.seed(2964)
-set1_data <- sim_data_setting1(N = 10000)
-set1_data_fu <- sim_data_setting1(N = 10000, followup = 5)
+set1_data <- sim_data_setting1(N = 5000)
+set1_data_fu <- sim_data_setting1(N = 5000, followup = 5)
 plot_event_data(set1_data)
 plot_event_data(set1_data_fu)
 ```
@@ -65,7 +60,7 @@ summary_sim_event <- function(data) {
   mean_T <- mean(data$Time)
   max_T <- max(data$Time)
   
-  return(data.table("Prop Op" = prop_op, "Prop Death" = prop_death, "Prop Cens" = prop_cens, 
+  return(c("Prop Op" = prop_op, "Prop Death" = prop_death, "Prop Cens" = prop_cens, 
                     "Prop FU Cens" = prop_fu_cens, "Prop Cov" = prop_cov, "Mean Time" = mean_T, 
                     "Max Time" = max_T))
 }
@@ -80,7 +75,138 @@ summary_sim_event(set2b_data)
 summary_sim_event(set2b_fu_data)
 ```
 
-### Investigating modl misspecifications
+### Fitting models
+
+
+```{r}
+# Transform data into tstart tstop format
+set2a_data_int <- trans_int_data(set2a_data)
+
+set2a_data_int[, at_risk_cov := as.numeric(L == 0)]
+
+# Fit models
+survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0  + A0 + L, 
+                       data = set2a_data_int, cluster = ID)
+survfit_cens <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A0 + L, 
+                      data = set2a_data_int, cluster = ID)
+survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0 + A0, 
+                     data = set2a_data_int[at_risk_cov == 1], cluster = ID)
+
+survfit_death$coefficients 
+survfit_cens$coefficients 
+survfit_cov$coefficients
+```
+
+```{r}
+# Transform data into tstart tstop format
+set2b_data_int <- trans_int_data(set2b_data)
+
+set2b_data_int[, at_risk_cov := as.numeric(L == 0)]
+
+# Fit models
+survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0  + A0 + L, 
+                       data = set2b_data_int, cluster = ID)
+survfit_cens <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A0 + L, 
+                      data = set2b_data_int, cluster = ID)
+survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0 + A0, 
+                     data = set2b_data_int[at_risk_cov == 1], cluster = ID)
+
+survfit_death$coefficients 
+survfit_cens$coefficients 
+survfit_cov$coefficients
+```
+
+
+### Proportions
+
+Note that we can affect the intensities by:
+
+$$\lambda^x_k(t\, \vert \, \mathcal{F}_{t-}) =  R^x(t,k)  \eta^x \nu^x t^{\nu^x - 1} 
+ \exp(\beta^T Z)$$
+
+changing the value of $\eta^x$. For a follow up time $K$ 
+
+```{r}
+eta_vals <- seq(0.05, 0.35, by = 0.1)
+eta_vec <- expand.grid(eta1 = eta_vals, eta2 = 0.1, eta3 = 0.1, eta4 = eta_vals)
+
+K <- 5
+summaries <- matrix(ncol = 7, nrow = nrow(eta_vec))
+
+for(i in 1:nrow(eta_vec)){
+  print(i)
+  eta <- eta_vec[i,]
+  sim <- sim_data_setting1(100, eta = eta, followup = K)
+  summaries[i,] <- summary_sim_event(sim)
+}
+
+colnames(summaries) <- names(summary_sim_event(sim))
+summaries
+```
+
+### Investigating model misspecifications
+
+Function for fitting and extracting model estimates, when the model is specified correctly, misspecified in terms of missing time varying covariate effect and misspecified in terms of missing operation effect.  
+
+```{r}
+fit_mod_set1 <- function(data){
+  trans_data <- trans_int_data(data)
+  
+  trans_data[, at_risk_oper := as.numeric(A == 0)]
+  trans_data[, at_risk_cov := as.numeric(L == 0)]
+  
+  results <- matrix(nrow = 10, ncol = 3)
+  colnames(results) <- c("True", "-L", "-A")
+
+  # True models:
+  survfit_oper <- coxph(Surv(tstart, tstop, Delta == 0) ~ L0 + L, 
+                        data = trans_data[at_risk_oper == 1], cluster = ID)
+  survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0 + A + L, 
+                        data = trans_data, cluster = ID)
+  survfit_cens <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A + L, 
+                        data = trans_data, cluster = ID)
+  survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0 + A, 
+                      data = trans_data[at_risk_cov == 1], cluster = ID)
+  
+  results[,1] <- c(survfit_oper$coefficients, survfit_death$coefficients, 
+                   survfit_cens$coefficients, survfit_cov$coefficients)
+  
+  # Cox models only with time varying covariate:
+
+  survfit_oper <- coxph(Surv(tstart, tstop, Delta == 0) ~ L0 + L, 
+                        data = set1_data_int[at_risk_oper == 1], cluster = ID)
+  survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0 + L, 
+                         data = set1_data_int, cluster = ID)
+  survfit_cens <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + L, 
+                        data = set1_data_int, cluster = ID)
+  survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0, 
+                       data = set1_data_int[at_risk_cov == 1], cluster = ID)
+  
+  results[,2] <- c(survfit_oper$coefficients, survfit_death$coefficients[1], NA, 
+                   survfit_death$coefficients[2], survfit_cens$coefficients[1], NA, 
+                   survfit_cens$coefficients[2], survfit_cov$coefficients, NA)
+
+  # Cox models only with operation:
+  survfit_oper <- coxph(Surv(tstart, tstop, Delta == 0) ~ L0, 
+                        data = set1_data_int[at_risk_oper == 1], cluster = ID)
+  survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0 + A, 
+                         data = set1_data_int, cluster = ID)
+  survfit_cens <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A, 
+                        data = set1_data_int, cluster = ID)
+  survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0 + A, 
+                       data = set1_data_int[at_risk_cov == 1], cluster = ID)
+  
+  results[,3] <- c(survfit_oper$coefficients, NA, survfit_death$coefficients, NA,
+                   survfit_cens$coefficients, NA, survfit_cov$coefficients)
+  
+  return(results)
+  
+}
+
+fit_mod_set1(set1_data)
+```
+
+Initial investigations:
 
 ```{r}
 # Transform data into tstart tstop format
@@ -128,71 +254,24 @@ survfit_cov$coefficients; survfit_cov1$coefficients; survfit_cov2$coefficients
 
 ```
 
-### Fitting models
+More systematic investigation:
 
 ```{r}
-# Transform data into tstart tstop format
-set2a_data_int <- trans_int_data(set2a_data)
+set.seed(9458)
+B <- 100
+N <- 500
 
-set2a_data_int[, at_risk_cov := as.numeric(L == 0)]
-
-# Fit models
-survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0  + A0 + L, 
-                       data = set2a_data_int, cluster = ID)
-survfit_cens <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A0 + L, 
-                      data = set2a_data_int, cluster = ID)
-survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0 + A0, 
-                     data = set2a_data_int[at_risk_cov == 1], cluster = ID)
-
-survfit_death$coefficients 
-survfit_cens$coefficients 
-survfit_cov$coefficients
-```
-
-```{r}
-# Transform data into tstart tstop format
-set2b_data_int <- trans_int_data(set2b_data)
-
-set2b_data_int[, at_risk_cov := as.numeric(L == 0)]
-
-# Fit models
-survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0  + A0 + L, 
-                       data = set2b_data_int, cluster = ID)
-survfit_cens <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A0 + L, 
-                      data = set2b_data_int, cluster = ID)
-survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0 + A0, 
-                     data = set2b_data_int[at_risk_cov == 1], cluster = ID)
-
-survfit_death$coefficients 
-survfit_cens$coefficients 
-survfit_cov$coefficients
-```
-
-
-### Proportions
-
-
-Note that we can affect the intensities by:
-
-$$\lambda^x_k(t\, \vert \, \mathcal{F}_{t-}) =  R^x(t,k)  \eta^x \nu^x t^{\nu^x - 1} 
- \exp(\beta^T Z)$$
-
-changing the value of $\eta^x$. For a follow up time $K$ 
-
-```{r}
-eta_vals <- rep(0.05, 4)
-incr <- 0.05
-K <- 5
-summaries <- list()
-
-for(i in 1:12){
-  sim <- sim_data_setting2(1000, eta = eta_vals, followup = K)
-  summaries[[i]] <- summary_sim_event(sim)
-  eta_vals[i %% 4] <- eta_vals[i %% 4] + incr
+for(i in 1:B){
+  sim <- sim_data_setting1(N = 1000)
+  
+  
+  
 }
-
-
 ```
+
+
+
+
 
 
 
