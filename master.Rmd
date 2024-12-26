@@ -231,12 +231,12 @@ Systematic investigation:
 
 ```{r}
 set.seed(9458)
-B <- 100
-N <- 500
+B <- 200
+N <- 600
 mod_est <- matrix(nrow = 10*B, ncol = 3)
 
 for(i in 1:B){
-  sim <- sim_data_setting1(N = N, eta = c(0.06, 0.08, 0.08, 0.08), followup = 5)
+  sim <- sim_data_setting1(N = N, eta = c(0.03, 0.04, 0.04, 0.04))
   mod_est[(i*10 - 9):(i*10),] <- fit_mod_set1(sim)
 }
 ```
@@ -245,14 +245,44 @@ Histograms of the estimates:
 
 ```{r}
 plotdata <- data.table(mod_est)
-plotdata[, "Est" := rep(c("L0", "L", "L0", "A", "L", "L0", "A", "L", "L0", "A"), B)]
+plotdata[, "Est" := rep(c("Op L0", "Op L", "Death L0", "Death A", "Death L", 
+                          "Cens L0", "Cens A", "Cens L", "Cov L0", "Cov A"), B)]
 
-ggplot(data = data.table(mod_est))+
+plotdata[, "True" := rep(c(1, 1, 1, -1, 1, 0, 0, 0, 1, 1), B)]
+
+ggplot(data = plotdata)+
   geom_histogram(aes(x = V1, y = ..density..), binwidth = 0.1, 
                  fill = "blue", alpha = 0.5, col = "white")+
-  facet_wrap(~Est, scales = "free")
+  facet_wrap(~Est, scales = "free") +
+  geom_vline(aes(xintercept = True), color = "red", linetype = 2)
+
+ggplot(data = plotdata)+
+  geom_histogram(aes(x = V2, y = ..density..), binwidth = 0.1, 
+                 fill = "blue", alpha = 0.5, col = "white")+
+  facet_wrap(~Est, scales = "free") +
+  geom_vline(aes(xintercept = True), color = "red", linetype = 2)
+
+ggplot(data = plotdata)+
+  geom_histogram(aes(x = V3, y = ..density..), binwidth = 0.1, 
+                 fill = "blue", alpha = 0.5, col = "white")+
+  facet_wrap(~Est, scales = "free") +
+  geom_vline(aes(xintercept = True), color = "red", linetype = 2)
 ```
 
+Bias:
+
+```{r}
+b1 <- plotdata[,.("Bias True" = mean(V1 - True)), by = Est]
+b2 <- plotdata[,.("Bias -A" = mean(V2 - True)), by = Est]
+b3 <- plotdata[,.("Bias -L" = mean(V3- True)), by = Est]
+
+cbind(b1, b2[,2], b3[,2])
+```
+To do:
+
+- Investigate coverage
+- Check what goes wrong in the covariate process estimation
+- Make function faster (evt. snak med Thomas Scheike)
 
 
 
