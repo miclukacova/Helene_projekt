@@ -1,0 +1,152 @@
+---
+title: 'Benschmarking and profiling'
+output: html_document
+date: "2024-10-18"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# Libraries
+library(data.table)
+library(survival)
+#install.packages("rtmle")
+#devtools::install_github("tagteam/rtmle")
+library(rtmle)
+library(ggplot2)
+library(microbenchmark)
+theme_set(theme_bw())
+```
+
+# Optimizing the simulation algorithm
+
+
+```{r}
+profvis::profvis({
+sim_event_data <- function(N,                      # Number of individuals
+                           beta = NULL,            # Effects
+                           eta = rep(0.1,4),       # Shape parameters
+                           nu = rep(1.1,4),        # Scale parameters
+                           at_risk = NULL,         # Function defining the setting
+                           term_deltas = c(1,2)    # Terminal events
+                           )
+  {
+  ID <- NULL
+  if(is.null(beta)){
+    beta <- matrix(0, nrow = 4, ncol = 4)
+  }
+
+
+  if(is.null(at_risk)){
+    at_risk <- function(i, L, A) {
+      return(c(
+        # You are only at risk for an operation if you have not had an operation yet
+        as.numeric(A[i] == 0),
+        # If you have not died yet or been censored yet, you are at risk for dying or being censored
+        1,1,
+        # You are only at risk for a change in the covariate process if you have not had a change yet
+        as.numeric(L[i] == 0)))
+  }}
+
+  # Events
+  x <- 1:ncol(beta)
+
+  # Intensities
+  phi <- function(i) {
+    exp(L0[i] * beta[1,] + A[i] * beta[2,] + A0[i] * beta[3,] + L[i] * beta[4,])
+  }
+
+  lambda <- function(t, i) {
+    at_risk(i, L, A) * eta * nu * t ^ (nu - 1) * phi(i)
+  }
+
+  # Summed cumulative hazard
+  sum_cum_haz <- function(u, t, i) {
+    sum(at_risk(i, L, A) * eta * phi(i) * ((t + u) ^ nu - t ^ nu))
+  }
+
+  # Inverse summed cumulative hazard function
+  inverse_sc_haz <- function(p, t, i, lower_bound = 10^-15, upper_bound = 100) {
+    root_function <- function(u) sum_cum_haz(u, t, i) - p
+    stats::uniroot(root_function, lower = lower_bound, upper = upper_bound)$root
+  }
+
+  # Event probabilities
+  probs <- function(t, i){
+    probs <- lambda(t, i)
+    summ <- sum(probs)
+    probs / summ
+  }
+
+  # Draw
+  L0 <- stats::runif(N)
+  A0 <- stats::rbinom(N, 1, 0.5)
+
+  # Initialize
+  T_k <- rep(0,N)
+  Delta <- -1
+  L <- rep(0, N)
+  A <- rep(0, N)
+  alive <- 1:N
+
+  res <- data.table()
+
+  while(length(alive) != 0){
+    # Simulate time
+    V <- stats::runif(N)
+    W <- sapply(alive, function(i) inverse_sc_haz(-log(V)[i], T_k[i], i))
+    T_k[alive] <- T_k[alive] + W
+
+    # Simulate event
+    Deltas <- sapply(alive, function(i) sample(x, size = 1, prob = probs(T_k[i], i)) - 1)
+
+    kth_event <- data.table(ID = alive,
+               Time = T_k[alive],
+               Delta = Deltas,
+               L0 = L0[alive],
+               L = L[alive],
+               A0 = A0[alive],
+               A = A[alive])
+
+    res <- rbind(res, kth_event)
+
+    # Update treatment process and covariate change indicators
+    A[alive][Deltas == 0] <- 1
+    L[alive][Deltas == 3] <- 1
+
+    # Who is still alive and uncensored?
+    alive <- alive[! Deltas %in% term_deltas]
+  }
+  setkey(res, ID)
+  return(res)
+}
+
+  sim_event_data(N = 5000)
+})
+
+
+my_bench <- bench::press(
+  N = 4^(3:6),
+  {
+    bench::mark(
+      "1" = sim_data_setting1(N = N, followup = 5),
+      "2" = sim_data_setting1(N = N),
+      check = FALSE
+    )
+  }
+)
+
+my_bench |>
+  dplyr::mutate(expr = as.character(expression), median = as.numeric(median)) |> 
+  ggplot(aes(N, median, color = expr)) + geom_point() + 
+  scale_y_log10() +
+  geom_line() + labs(y = "time (ms)")
+```
+
+
+
+
+
+
+
+
+

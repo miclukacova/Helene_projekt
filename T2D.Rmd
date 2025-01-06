@@ -1,0 +1,129 @@
+---
+title: 'T2D'
+output: html_document
+date: "2024-10-18"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# Libraries
+library(data.table)
+library(survival)
+#install.packages("rtmle")
+#devtools::install_github("tagteam/rtmle")
+library(rtmle)
+library(ggplot2)
+library(microbenchmark)
+theme_set(theme_bw())
+source("~/Helene_projekt/funcs_for_two_settings.R")
+```
+
+# The Simulation Function
+
+```{r}
+set.seed(2964)
+N <- 10000
+set2a_data <- sim_data_setting2(N = N, setting = "a")
+set2b_data <- sim_data_setting2(N = N, setting = "b")
+set2a_fu_data <- sim_data_setting2(N = N, setting = "a", followup = 5)
+set2b_fu_data <- sim_data_setting2(N = N, setting = "b", followup = 5)
+```
+
+
+```{r}
+plot_event_data(set2a_data)
+plot_event_data(set2a_fu_data)
+```
+
+
+# Proportions
+
+```{r}
+summary_sim_event(set2a_data)
+summary_sim_event(set2a_fu_data)
+summary_sim_event(set2b_data)
+summary_sim_event(set2b_fu_data)
+```
+
+# Fitting models
+
+```{r}
+# Transform data into tstart tstop format
+set2a_data_int <- trans_int_data(set2a_data)
+
+set2a_data_int[, at_risk_cov := as.numeric(L == 0)]
+
+# Fit models
+survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0  + A0 + L, 
+                       data = set2a_data_int, cluster = ID)
+survfit_cens <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A0 + L, 
+                      data = set2a_data_int, cluster = ID)
+survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0 + A0, 
+                     data = set2a_data_int[at_risk_cov == 1], cluster = ID)
+
+survfit_death$coefficients 
+survfit_cens$coefficients 
+survfit_cov$coefficients
+```
+
+```{r}
+# Transform data into tstart tstop format
+set2b_data_int <- trans_int_data(set2b_data)
+
+set2b_data_int[, at_risk_cov := as.numeric(L == 0)]
+
+# Fit models
+survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0  + A0 + L, 
+                       data = set2b_data_int, cluster = ID)
+survfit_cens <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A0 + L, 
+                      data = set2b_data_int, cluster = ID)
+survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0 + A0, 
+                     data = set2b_data_int[at_risk_cov == 1], cluster = ID)
+
+survfit_death$coefficients 
+survfit_cens$coefficients 
+survfit_cov$coefficients
+```
+
+# Finding effect of T2D on Death
+
+We want to find
+
+$$\frac{P(X(t) = 2)}{P(X(t) = 0)}$$
+
+```{r}
+# Individuals that experience T2D
+ID_T2D <- unique(set2a_fu_data[Delta == 3]$ID)
+# Individuals that do not experience T2D
+ID_not_T2D <- unique(set2a_fu_data[!ID %in% ID_T2D]$ID)
+
+# Number of individuals that experience T2D
+n1 <- ID_T2D |> length()
+# Number of individuals that do not experience T2D
+n0 <- ID_not_T2D  |> length()
+
+# Individuals that experience death with T2D 
+n3 <- ID_T2D  %in% unique(set2a_fu_data[Delta == 1]$ID) |> sum()
+# Individuals that experience death without T2D 
+n2 <- ID_not_T2D  %in% unique(set2a_fu_data[Delta == 1]$ID) |> sum()
+
+# Probability of experiencing T2D
+P_X1 <- n1/N
+# Probability of not experiencing T2D
+P_X0 <- 1 - P_X1
+
+# Probability of dying with T2D
+P_X3 <- n3/N
+# Probability of  of dying without T2D
+P_X2 <- n2/N
+
+P_X3/P_X1
+P_X2/P_X0
+```
+
+```{r}
+# TODO do the same for the other dataset and check that it all makes sense
+set2b_fu_data
+```
+
+

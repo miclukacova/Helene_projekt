@@ -1,0 +1,163 @@
+---
+title: 'Hidden Confounder'
+output: html_document
+date: "2024-10-18"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# Libraries
+library(data.table)
+library(survival)
+#install.packages("rtmle")
+#devtools::install_github("tagteam/rtmle")
+library(rtmle)
+library(ggplot2)
+library(microbenchmark)
+theme_set(theme_bw())
+source("~/Helene_projekt/funcs_for_two_settings.R")
+```
+
+# Simulation function
+
+```{r}
+set.seed(2964)
+set1_data <- sim_data_setting1(N = 5000)
+set1_data_fu <- sim_data_setting1(N = 5000, followup = 5)
+plot_event_data(set1_data)
+plot_event_data(set1_data_fu)
+```
+
+# Proportions
+
+```{r}
+summary_sim_event(set1_data)
+summary_sim_event(set1_data_fu)
+```
+
+# Fitting models
+
+```{r}
+set1_data_t <- trans_int_data(set1_data)
+
+set1_data_t[, at_risk_oper := as.numeric(A == 0)]
+set1_data_t[, at_risk_cov := as.numeric(L == 0)]
+
+survfit_oper <- coxph(Surv(tstart, tstop, Delta == 0) ~ L0 + L, 
+                      data = set1_data_t[at_risk_oper == 1], cluster = ID)
+survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0 + A + L, 
+                      data = set1_data_t, cluster = ID)
+survfit_cens <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A + L, 
+                      data = set1_data_t, cluster = ID)
+survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0 + A, 
+                    data = set1_data_t[at_risk_cov == 1], cluster = ID)
+
+survfit_oper$coefficients 
+survfit_death$coefficients 
+survfit_cens$coefficients 
+survfit_cov$coefficients
+```
+
+Note that we can affect the intensities by:
+
+$$\lambda^x_k(t\, \vert \, \mathcal{F}_{t-}) =  R^x(t,k)  \eta^x \nu^x t^{\nu^x - 1} 
+ \exp(\beta^T Z)$$
+
+changing the value of $\eta^x$. For a follow up time $K$ 
+
+```{r}
+eta_vals <- seq(0.05, 0.15, by = 0.01)
+etas <- expand.grid(eta1 = eta_vals, eta2 = 0.08, eta3 = 0.08, eta4 = 0.08)
+
+K <- 5
+summaries <- matrix(ncol = 7, nrow = nrow(etas))
+
+for(i in 1:nrow(etas)){
+  print(i)
+  eta <- etas[i,]
+  sim <- sim_data_setting1(1000, eta = eta, followup = K)
+  summaries[i,] <- summary_sim_event(sim)
+}
+
+colnames(summaries) <- names(summary_sim_event(sim))
+head(summaries)
+
+p1 <- ggplot(data = summaries)+
+  geom_line(aes(x = etas[,1], y = `Prop Op`, color = "Op"))+
+  geom_line(aes(x = etas[,1], y = `Prop Cov`, color = "Cov"))+
+  geom_line(aes(x = etas[,1], y = `Prop Death`, color = "Death"), linetype = 2)+
+  geom_line(aes(x = etas[,1], y = `Prop Cens`, color = "Cens"), linetype = 2)+
+  geom_line(aes(x = etas[,1], y = `Prop FU Cens`, color = "FU Cens"), linetype = 2)+
+  scale_color_manual(values = c("red3", "blue2", "green3", "purple3", "pink"))
+
+p1
+
+
+#p2 <- ggplot(data = summaries)+
+#  geom_line(aes(x = etas[,4], y = `Prop Op`, color = "Op"))+
+#  geom_line(aes(x = etas[,4], y = `Prop Cov`, color = "Cov"))+
+#  geom_line(aes(x = etas[,4], y = `Prop Death`, color = "Death"), linetype = 2)+
+#  geom_line(aes(x = etas[,4], y = `Prop Cens`, color = "Cens"), linetype = 2)+
+#  geom_line(aes(x = etas[,4], y = `Prop FU Cens`, color = "FU Cens"), linetype = 2)+
+#  scale_color_manual(values = c("red3", "blue2", "green3", "purple3", "pink"))
+#
+#gridExtra::grid.arrange(p1, p2, ncol = 2)
+```
+
+# Investigating model misspecifications
+
+Function for fitting and extracting model estimates, when the model is specified correctly, misspecified in terms of missing time varying covariate effect and misspecified in terms of missing operation effect.  
+
+```{r}
+fit_mod_set1(set1_data)
+```
+Analysing error in modelsspecifications with repeated simulations. 
+
+```{r}
+# TODO: inkorporer followup i den her
+set.seed(9457)
+try1 <- sys_invest(N = 400, eff_A_D = -0.5)
+try2 <- sys_invest(N = 400, eff_L_A = 2, eff_L_D = 2, eff_A_D = -0.5)
+# TODO: Af en eller anden grund går det galt her?
+try3 <- sys_invest(N = 100, eff_L_A = 1, eff_L_D = 1, eff_A_D = -0.2)
+
+
+data1 <- sim_data_setting1(N = 20000, eta = rep(0.05,4), nu = rep(1.02, 4),
+                           beta_L_A = 1, beta_L_D = 1, beta_A_D = -0.2)
+
+summary_sim_event(data1)
+newdata <- trans_int_data(data1)[, .(intlength= (tstop - tstart))]
+fit_mod_set1(data1)
+
+sum(newdata$intlength <= 10^(-3))
+```
+
+Histograms of the estimates when the models are mis specified:
+
+```{r}
+try1$pp3
+try2$pp3
+try3$pp3
+```
+
+
+Bias:
+
+```{r}
+try1$Bias
+try2$Bias
+try3$Bias
+```
+
+Der er bias i dødsprocessen (hidden confounder).
+
+
+
+
+
+
+
+
+
+
+
