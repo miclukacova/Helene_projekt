@@ -18,7 +18,7 @@ summary_sim_event <- function(data) {
 
 # Function for fitting models, with and without misspecifications
 
-fit_mod_set1 <- function(data){
+fit_mod_set1 <- function(data, timefix = TRUE){
   trans_data <- trans_int_data(data)
 
   trans_data[, at_risk_oper := as.numeric(A == 0)]
@@ -30,13 +30,17 @@ fit_mod_set1 <- function(data){
 
   # True models:
   survfit_oper <- coxph(Surv(tstart, tstop, Delta == 0) ~ L0 + L,
-                        data = trans_data[at_risk_oper == 1], cluster = ID)
+                        data = trans_data[at_risk_oper == 1], cluster = ID,
+                        timefix = timefix)
   survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0 + A + L,
-                         data = trans_data, cluster = ID)
+                         data = trans_data, cluster = ID,
+                         timefix = timefix)
   survfit_cens <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A + L,
-                        data = trans_data, cluster = ID)
+                        data = trans_data, cluster = ID,
+                        timefix = timefix)
   survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0 + A,
-                       data = trans_data[at_risk_cov == 1], cluster = ID)
+                       data = trans_data[at_risk_cov == 1], cluster = ID,
+                       timefix = timefix)
 
   results[,1] <- c(survfit_oper$coefficients, survfit_death$coefficients,
                    survfit_cens$coefficients, survfit_cov$coefficients)
@@ -44,13 +48,17 @@ fit_mod_set1 <- function(data){
   # Cox models only with time varying covariate:
 
   survfit_oper <- coxph(Surv(tstart, tstop, Delta == 0) ~ L0 + L,
-                        data = trans_data[at_risk_oper == 1], cluster = ID)
+                        data = trans_data[at_risk_oper == 1], cluster = ID,
+                        timefix = timefix)
   survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0 + L,
-                         data = trans_data, cluster = ID)
+                         data = trans_data, cluster = ID,
+                         timefix = timefix)
   survfit_cens <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + L,
-                        data = trans_data, cluster = ID)
+                        data = trans_data, cluster = ID,
+                        timefix = timefix)
   survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0,
-                       data = trans_data[at_risk_cov == 1], cluster = ID)
+                       data = trans_data[at_risk_cov == 1], cluster = ID,
+                       timefix = timefix)
 
   results[,2] <- c(survfit_oper$coefficients, survfit_death$coefficients[1], NA,
                    survfit_death$coefficients[2], survfit_cens$coefficients[1], NA,
@@ -58,13 +66,17 @@ fit_mod_set1 <- function(data){
 
   # Cox models only with operation:
   survfit_oper <- coxph(Surv(tstart, tstop, Delta == 0) ~ L0,
-                        data = trans_data[at_risk_oper == 1], cluster = ID)
+                        data = trans_data[at_risk_oper == 1], cluster = ID,
+                        timefix = timefix)
   survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0 + A,
-                         data = trans_data, cluster = ID)
+                         data = trans_data, cluster = ID,
+                         timefix = timefix)
   survfit_cens <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A,
-                        data = trans_data, cluster = ID)
+                        data = trans_data, cluster = ID,
+                        timefix = timefix)
   survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0 + A,
-                       data = trans_data[at_risk_cov == 1], cluster = ID)
+                       data = trans_data[at_risk_cov == 1], cluster = ID,
+                       timefix = timefix)
 
   results[,3] <- c(survfit_oper$coefficients, NA, survfit_death$coefficients, NA,
                    survfit_cens$coefficients, NA, survfit_cov$coefficients)
@@ -76,14 +88,15 @@ fit_mod_set1 <- function(data){
 
 # Bootstrap for estimating model misspecification effect
 
-sys_invest <- function(eff_L_A = 1.5, eff_L_D = 1.5, eff_A_D = -1, B = 200, N = 400) {
+sys_invest <- function(eff_L_A = 1, eff_L_D = 1, eff_A_D = -1, B = 200, N = 400) {
 
   # create results table
   mod_est <- matrix(nrow = 10*B, ncol = 3)
 
   # run simulations
   for(i in 1:B){
-    sim <- sim_data_setting1(N = N, eta = rep(0.05,4), nu = rep(1.02, 4),
+    #browser()
+    sim <- sim_data_setting1(N = N, eta = rep(0.05,4), nu = rep(1.02, 4), 
                              beta_L_A = eff_L_A, beta_L_D = eff_L_D, beta_A_D = eff_A_D)
     mod_est[(i*10 - 9):(i*10),] <- fit_mod_set1(sim)
   }
@@ -124,3 +137,52 @@ sys_invest <- function(eff_L_A = 1.5, eff_L_D = 1.5, eff_A_D = -1, B = 200, N = 
   return(list(Bias = bias, pp1 = pp1, pp2 = pp2, pp3 = pp3))
 
 }
+
+
+# Function for calculating the two probability fractions
+
+prob_fracs <- function(data, tau = 5){
+  
+  data <- data[Time <= tau]
+  
+  # Individuals that experience T2D
+  ID_T2D <- data[Delta == 3]$ID
+  # Individuals that do not experience T2D
+  ID_not_T2D <- unique(data[!ID %in% ID_T2D]$ID)
+  
+  # Number of individuals that experience T2D
+  n1 <- ID_T2D |> length()
+  # Number of individuals that do not experience T2D
+  n0 <- ID_not_T2D  |> length()
+  
+  # Individuals that experience death with T2D 
+  n3 <- ID_T2D  %in% data[Delta == 1]$ID |> sum()
+  # Individuals that experience death without T2D 
+  n2 <- ID_not_T2D  %in% data[Delta == 1]$ID |> sum()
+  
+  # Probability of experiencing T2D
+  P_X1 <- n1 / N
+  # Probability of not experiencing T2D
+  P_X0 <- 1 - P_X1
+  
+  # Probability of dying with T2D
+  P_X3 <- n3 / N
+  # Probability of  of dying without T2D
+  P_X2 <- n2 / N
+  
+  return(c("WO T2D" = P_X2 / P_X0,"W T2D" = P_X3 / P_X1))
+}
+
+
+# Function for finding the rolling average
+
+roll_avg <- function(x) {
+  n <- length(x)
+  returnn <- numeric(n)
+  for(i in 1:n) {
+    returnn[i] <- mean(x[1:i])
+  }
+  returnn
+}
+
+

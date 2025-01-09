@@ -125,12 +125,10 @@ sim_event_data <- function(N,                      # Number of individuals
 
 
 my_bench <- bench::press(
-  N = 4^(3:6),
+  N = 2^(4:10),
   {
     bench::mark(
-      "1" = sim_data_setting1(N = N, followup = 5),
-      "2" = sim_data_setting1(N = N),
-      check = FALSE
+      "sim_event_data" = sim_event_data(N = N)
     )
   }
 )
@@ -138,8 +136,10 @@ my_bench <- bench::press(
 my_bench |>
   dplyr::mutate(expr = as.character(expression), median = as.numeric(median)) |> 
   ggplot(aes(N, median, color = expr)) + geom_point() + 
-  scale_y_log10() +
+  #scale_y_log10() +
   geom_line() + labs(y = "time (ms)")
+
+# Vokser lineært
 ```
 
 
