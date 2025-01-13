@@ -18,7 +18,7 @@ summary_sim_event <- function(data) {
 
 # Function for fitting models, with and without misspecifications
 
-fit_mod_set1 <- function(data, timefix = TRUE){
+fit_mod_set1 <- function(data, timefix = FALSE){
   trans_data <- trans_int_data(data)
 
   trans_data[, at_risk_oper := as.numeric(A == 0)]
@@ -88,7 +88,8 @@ fit_mod_set1 <- function(data, timefix = TRUE){
 
 # Bootstrap for estimating model misspecification effect
 
-sys_invest <- function(eff_L_A = 1, eff_L_D = 1, eff_A_D = -1, B = 200, N = 400) {
+sys_invest <- function(eff_L_A = 1, eff_L_D = 1, eff_A_D = -1, B = 200, N = 400, 
+                       timefix = FALSE) {
 
   # create results table
   mod_est <- matrix(nrow = 10*B, ncol = 3)
@@ -96,9 +97,8 @@ sys_invest <- function(eff_L_A = 1, eff_L_D = 1, eff_A_D = -1, B = 200, N = 400)
   # run simulations
   for(i in 1:B){
     #browser()
-    sim <- sim_data_setting1(N = N, eta = rep(0.05,4), nu = rep(1.02, 4), 
-                             beta_L_A = eff_L_A, beta_L_D = eff_L_D, beta_A_D = eff_A_D)
-    mod_est[(i*10 - 9):(i*10),] <- fit_mod_set1(sim)
+    sim <- sim_data_setting1(N = N, beta_L_A = eff_L_A, beta_L_D = eff_L_D, beta_A_D = eff_A_D)
+    mod_est[(i*10 - 9):(i*10),] <- fit_mod_set1(sim, timefix = timefix)
   }
 
   # create plots
@@ -134,7 +134,7 @@ sys_invest <- function(eff_L_A = 1, eff_L_D = 1, eff_A_D = -1, B = 200, N = 400)
     facet_wrap(~Est, scales = "free") +
     geom_vline(aes(xintercept = True), color = "red", linetype = 2)
 
-  return(list(Bias = bias, pp1 = pp1, pp2 = pp2, pp3 = pp3))
+  return(list(Bias = bias, pp1 = pp1, pp2 = pp2, pp3 = pp3, data = plotdata))
 
 }
 

@@ -10,7 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(data.table)
 library(survival)
 #install.packages("rtmle")
-devtools::install_github("tagteam/rtmle")
+#devtools::install_github("tagteam/rtmle")
 library(rtmle)
 library(ggplot2)
 library(microbenchmark)
@@ -127,8 +127,10 @@ dataa10[, i := 1:B]
 ```
 
 ```{r}
+#jpeg("T2D_5.jpg")
 ggplot(melt(results, measure.vars = 1:6))+
   geom_line(aes(x = i, y = value, col = variable), size = 1, linetype = "dashed")
+#dev.off()
 
 ggplot(melt(dataa, measure.vars = 1:6))+
   geom_line(aes(x = i, y = value, col = variable), size = 1, linetype = "dashed")
@@ -136,8 +138,10 @@ ggplot(melt(dataa, measure.vars = 1:6))+
 All scenarios have approximately the same probability ratio of WO T2D $\approx 0.51$ . The effect of L on Death seems proportional to beta. 
 
 ```{r}
+jpeg("T2D_10.jpg")
 ggplot(melt(results10, measure.vars = 1:6))+
   geom_line(aes(x = i, y = value, col = variable), size = 1, linetype = "dashed")
+dev.off()
 
 ggplot(melt(dataa10, measure.vars = 1:6))+
   geom_line(aes(x = i, y = value, col = variable), size = 1, linetype = "dashed")
