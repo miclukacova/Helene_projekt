@@ -18,143 +18,65 @@ theme_set(theme_bw())
 source("~/Helene_projekt/funcs_for_two_settings.R")
 ```
 
-# The Simulation Function
 
 ```{r}
-set.seed(2964)
-N <- 10000
-set2a_data <- sim_data_setting2(N = N, beta_L_D = 1, cens = 0) # T2D has effect on Death and we have no censoring
-set2b_data <- sim_data_setting2(N = N, beta_L_D = 0, cens = 0)# T2D has no effect on Death and we have no censoring
-set2c_data <- sim_data_setting2(N = N, beta_L_D = 0.5, cens = 0)# T2D has small effect on Death and we have no censoring
-set2a_fu_data <- sim_data_setting2(N = N, beta_L_D = 1, followup = 5)
-set2b_fu_data <- sim_data_setting2(N = N, beta_L_D = 0, followup = 5)
-```
-
-
-```{r}
-plot_event_data(set2a_data)
-plot_event_data(set2a_fu_data)
-plot_event_data(set2b_data)
-plot_event_data(set2b_fu_data)
-```
-
-
-# Proportions
-
-```{r}
-summary_sim_event(set2a_data)
-summary_sim_event(set2a_fu_data)
-summary_sim_event(set2b_data)
-summary_sim_event(set2b_fu_data)
-```
-
+#plot_event_data(set2a_data)
+#summary_sim_event(set2a_data)
 # Fitting models
-
-```{r}
 # Transform data into tstart tstop format
-mod_data_a <- trans_int_data(set2a_fu_data)
-
-mod_data_a[, at_risk_cov := as.numeric(L == 0)]
-
-# Fit models
-survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0  + A0 + L, 
-                       data = mod_data_a, cluster = ID)
-survfit_cens <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A0 + L, 
-                      data = mod_data_a, cluster = ID)
-survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0 + A0, 
-                     data = mod_data_a[at_risk_cov == 1], cluster = ID)
-
-survfit_death$coefficients 
-survfit_cens$coefficients 
-survfit_cov$coefficients
+#mod_data_a <- trans_int_data(set2a_fu_data)
+#mod_data_a[, at_risk_cov := as.numeric(L == 0)]
+## Fit models
+#survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0  + A0 + L, 
+#                       data = mod_data_a, cluster = ID)
+#survfit_cens <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A0 + L, 
+#                      data = mod_data_a, cluster = ID)
+#survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0 + A0, 
+#                     data = mod_data_a[at_risk_cov == 1], cluster = ID)
+#survfit_death$coefficients 
+#survfit_cens$coefficients 
+#survfit_cov$coefficients
 ```
 
-# Finding effect of T2D on Death
+# A more meaningful estimand
 
-We want to find
-
-$$\frac{P(X(\tau) = 2)}{P(X(\tau) = 0)}$$
-And 
-$$\frac{P(X(\tau) = 3)}{P(X(\tau) = 1)}$$
-Where $\tau \in \mathbb{R}$. That is the fraction of the probability of being dead without T2D at time $\tau$ over the probability of not having T2D at time $\tau$ and the fraction of the probability of being dead with T2D at time $\tau$ over the probability of having T2D at time $\tau$. We define $\tau$ as 
+Should we include censoring?
 
 ```{r}
-tau <- 5
+N <- 5000
+data_A <- sim_data_setting2(N = N, beta_L_D = 1, cens = 1)
+
+# Finding all the T2D people and setting T_0 to debut time of diabetes
+T2D_events <- data_A[Delta == 3]
+T2D_peeps <- data_A[ID %in% T2D_events$ID]
+T2D_peeps[, Time_T2D := Time - min(Time), by = ID]
+T2D_peeps <- T2D_peeps[Delta != 3]
+T2D_peeps[, Status := Delta == 1]
+
+
+# Kaplan Meyer fit
+library(prodlim)
+fit <- prodlim(Hist(Time_T2D, Status) ~ L0 + A0, data = T2D_peeps)
+plot(fit)
 ```
-
 ```{r}
-prob_fracs(set2a_data) # In the data where the change in the covariate process (L = 1) increases risk of death
-prob_fracs(set2b_data) # In the data where the change in the covariate process does not increase risk of death
-prob_fracs(set2c_data) # In the data where the change in the covariate process increases risk of death a little bit
-```
-
-Repeated calculations:
-
-```{r}
-set.seed(8453)
-B <- 10 
-N <- 12000
-results <- matrix(NA, nrow = B, ncol = 6)
-results10 <- matrix(NA, nrow = B, ncol = 6)
-colnames(results) <- c("A: WO T2D", "A: T2D", "B: WO T2D", "B: T2D", "C: WO T2D", "C: T2D")
-colnames(results10) <- c("A: WO T2D", "A: T2D", "B: WO T2D", "B: T2D", "C: WO T2D", "C: T2D")
-
-for(i in 1:B){
-  print(i)
-  data_A <- sim_data_setting2(N = N, beta_L_D = 1, cens = 0) 
-  data_B <- sim_data_setting2(N = N, beta_L_D = 0, cens = 0)
-  data_C <- sim_data_setting2(N = N, beta_L_D = 0.5, cens = 0)
-  results[i, 1:2] <- prob_fracs(data_A) 
-  results[i, 3:4] <- prob_fracs(data_B)
-  results[i, 5:6] <- prob_fracs(data_C)
-  results10[i, 1:2] <- prob_fracs(data_A, tau = 10) 
-  results10[i, 3:4] <- prob_fracs(data_B, tau = 10)
-  results10[i, 5:6] <- prob_fracs(data_C, tau = 10)
+diff_betas <- seq(0,1,by = 0.1)
+for(beta in beta){
+  data <- sim_data_setting2(N = N, diff_betas = 1, cens = 1)
+  
+  # Finding all the T2D people and setting T_0 to debut time of diabetes
+  T2D_events <- data_A[Delta == 3]
+  T2D_peeps <- data_A[ID %in% T2D_events$ID]
+  T2D_peeps[, Time_T2D := Time - min(Time), by = ID]
+  T2D_peeps <- T2D_peeps[Delta != 3]
+  T2D_peeps[, Status := Delta == 1]
+  
+  # Kaplan meyer fit
+  fit <- prodlim(Hist(Time_T2D, Status) ~ L0 + A0, data = T2D_peeps)
 }
 ```
 
 
-```{r}
-dataa <- data.table(apply(results, 2, FUN = roll_avg))
-results <- data.table(results)
-results[, i := 1:B]
-dataa[, i := 1:B]
-
-dataa10 <- data.table(apply(results10, 2, FUN = roll_avg))
-results10 <- data.table(results10)
-results10[, i := 1:B]
-dataa10[, i := 1:B]
-```
-
-```{r}
-#jpeg("T2D_5.jpg")
-ggplot(melt(results, measure.vars = 1:6))+
-  geom_line(aes(x = i, y = value, col = variable), size = 1, linetype = "dashed")
-#dev.off()
-
-ggplot(melt(dataa, measure.vars = 1:6))+
-  geom_line(aes(x = i, y = value, col = variable), size = 1, linetype = "dashed")
-```
-All scenarios have approximately the same probability ratio of WO T2D $\approx 0.51$ . The effect of L on Death seems proportional to beta. 
-
-```{r}
-jpeg("T2D_10.jpg")
-ggplot(melt(results10, measure.vars = 1:6))+
-  geom_line(aes(x = i, y = value, col = variable), size = 1, linetype = "dashed")
-dev.off()
-
-ggplot(melt(dataa10, measure.vars = 1:6))+
-  geom_line(aes(x = i, y = value, col = variable), size = 1, linetype = "dashed")
-```
-Same conclusion, just different numbers.
-
-```{r}
-results |> apply(2, FUN = mean)
-results |> apply(2, FUN = sd)
-
-results10 |> apply(2, FUN = mean)
-results10 |> apply(2, FUN = sd)
-```
-
+Vi vil gerne skabe et plot med de forskellige betaer langs x-aksen og estimatet langs y-aksen. Jeg skal lige finde ud af hvad vi gerne vil estimere her. 
 
 

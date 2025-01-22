@@ -62,6 +62,7 @@ Den estimere ikke rigtigt når vi har censorering...
 
 ```{r}
 set1_data_t <- trans_int_data(set1_data_fu)
+set1_data_t[, C := !is.na(Delta)]
 
 set1_data_t[, at_risk_oper := as.numeric(A == 0)]
 set1_data_t[, at_risk_cov := as.numeric(L == 0)]
@@ -222,8 +223,13 @@ Looks quite reasonable. We look at the length of the intervals
 newdata <- trans_data[, .(intlength= (tstop - tstart))]
 
 # Der er nogle intervaller som er meget små
-shorties <- which(newdata$intlength <= 10^(-4))
+shorties <- which(newdata$intlength <= 10^(-3))
 newdata[shorties,] # de er helt vildt små! (e-15)
+trans_data[shorties, Delta] |> as.factor() |> summary() # Flest Type 1 events (død)
+trans_data[shorties, table(Delta,at_risk_cov)]
+trans_data[shorties, k] |> as.factor() |> summary() # Og flest når det er event nummer 2
+trans_data[shorties, at_risk_oper] |> as.factor() |> summary() # og når der ikke har været en operation
+trans_data[shorties, at_risk_cov] |> as.factor() |> summary() # og når der har været et covariate skifte
 ```
 The interval lengths are incredibly small...
 
