@@ -1,19 +1,29 @@
 Helenes bemærkninger og to do:
 
-1) Læse den nye artikel, minus sektion 7. 1-6 + 8 + 13
-(https://www.tandfonline.com/doi/epdf/10.1080/00031305.2019.1592781?needAccess=true)
-
 3) Meningsfuld estimand: Subsette diabetikere, definerer tid 0 som debut af diabetes, fit med Kaplan Meyer,
 se hvad efffekten af medikamentet er. Hvilken effekt kigger vi på her? Lav også plottet.
-
-5) Læse Helenes mail om intervention
 
 6) Skabe bedre covariater, f.eks. unif omkring 40 (alder), 0/1 for køn
 
 7) Læse videre på Thomas Scheikes kode - mets pakken i R (simRecurrrent funktionen)
 
+8) Ændre så 0 er censorering
+
+9) Tjekke at den nye censorering ikke giver fejlestimater på samme måde som den gamle
+
 
 Spørgesmål til Helene
+
 - Måden Thomas Scheike har lavet sin simulations funktion, kan vi gøre det samme?
+
 - Thomas siger om censorering: Det er okay.. det er mærkeligt at censurere på den måde, så det er okay at 
-det giver os noget mærkeligt.Vi skal finde en ny måde at censurere på. Have et max tidspunkt.
+det giver os noget mærkeligt. Vi skal finde en ny måde at censurere på. Have et max tidspunkt.
+
+Spørgesmål til Gerds:
+
+- Vis Thomas hvad jeg har gjort og hvordan jeg har fittet KM, spørg hvorvidt han synes vi skal have censorering.
+Hvilke meningsfulde estimater kan man kigge på?
+
+- Man kan ikke (lige så nemt i hvertfald) bruge tstart tstop formattet i survreg... Hvad gør vi når vi har
+ timevarying covariate, og hvorfor ændrer intensiteten sig ikke når vi laver en subgroup? Hvad er hele meningen med 
+ at bruge estimerede parametre?

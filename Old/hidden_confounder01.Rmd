@@ -1,0 +1,370 @@
+---
+title: 'Hidden Confounder'
+output: html_document
+date: "2024-10-18"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, include=FALSE}
+# Libraries
+library(data.table)
+library(survival)
+#install.packages("rtmle")
+#devtools::install_github("tagteam/rtmle")
+library(rtmle)
+library(ggplot2)
+library(microbenchmark)
+theme_set(theme_bw())
+source("~/Helene_projekt/funcs_for_two_settings.R")
+```
+
+# Simulation function
+
+```{r}
+set.seed(2964)
+set1_data <- sim_data_setting1(N = 5000)
+set1_data_fu <- sim_data_setting1(N = 10000, followup = 5)
+plot_event_data(set1_data)
+plot_event_data(set1_data_fu)
+```
+
+# Proportions
+
+```{r}
+summary_sim_event(set1_data)
+summary_sim_event(set1_data_fu)
+```
+
+# Fitting model
+
+```{r}
+set1_data_t <- trans_int_data(set1_data)
+
+set1_data_t[, at_risk_oper := as.numeric(A == 0)]
+set1_data_t[, at_risk_cov := as.numeric(L == 0)]
+
+survfit_oper <- coxph(Surv(tstart, tstop, Delta == 0) ~ L0 + L, 
+                      data = set1_data_t[at_risk_oper == 1], cluster = ID)
+survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0 + A + L, 
+                      data = set1_data_t, cluster = ID)
+survfit_cens <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A + L, 
+                      data = set1_data_t, cluster = ID)
+survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0 + A, 
+                    data = set1_data_t[at_risk_cov == 1], cluster = ID)
+
+survfit_oper$coefficients 
+survfit_death$coefficients 
+survfit_cens$coefficients 
+survfit_cov$coefficients
+```
+
+Den estimere ikke rigtigt når vi har censorering...
+
+```{r}
+set1_data_t <- trans_int_data(set1_data_fu)
+set1_data_t[, C := !is.na(Delta)]
+
+set1_data_t[, at_risk_oper := as.numeric(A == 0)]
+set1_data_t[, at_risk_cov := as.numeric(L == 0)]
+
+survfit_oper <- coxph(Surv(tstart, tstop, Delta == 0) ~ L0 + L, 
+                      data = set1_data_t[at_risk_oper == 1], cluster = ID)
+survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0 + A + L, 
+                      data = set1_data_t, cluster = ID)
+survfit_cens <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A + L, 
+                      data = set1_data_t, cluster = ID)
+survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0 + A, 
+                    data = set1_data_t[at_risk_cov == 1], cluster = ID)
+
+survfit_oper$coefficients 
+survfit_death$coefficients 
+survfit_cens$coefficients 
+survfit_cov$coefficients
+```
+
+Note that we can affect the intensities by:
+
+$$\lambda^x_k(t\, \vert \, \mathcal{F}_{t-}) =  R^x(t,k)  \eta^x \nu^x t^{\nu^x - 1} 
+ \exp(\beta^T Z)$$
+
+changing the value of $\eta^x$. For a follow up time $K$ 
+
+```{r}
+eta_vals <- seq(0.05, 0.15, by = 0.01)
+etas <- expand.grid(eta1 = eta_vals, eta2 = 0.08, eta3 = 0.08, eta4 = 0.08)
+
+K <- 5
+summaries <- matrix(ncol = 7, nrow = nrow(etas))
+
+for(i in 1:nrow(etas)){
+  print(i)
+  eta <- etas[i,]
+  sim <- sim_data_setting1(1000, eta = eta, followup = K)
+  summaries[i,] <- summary_sim_event(sim)
+}
+
+colnames(summaries) <- names(summary_sim_event(sim))
+head(summaries)
+
+p1 <- ggplot(data = summaries)+
+  geom_line(aes(x = etas[,1], y = `Prop Op`, color = "Op"))+
+  geom_line(aes(x = etas[,1], y = `Prop Cov`, color = "Cov"))+
+  geom_line(aes(x = etas[,1], y = `Prop Death`, color = "Death"), linetype = 2)+
+  geom_line(aes(x = etas[,1], y = `Prop Cens`, color = "Cens"), linetype = 2)+
+  geom_line(aes(x = etas[,1], y = `Prop FU Cens`, color = "FU Cens"), linetype = 2)+
+  scale_color_manual(values = c("red3", "blue2", "green3", "purple3", "pink"))
+
+p1
+
+
+#p2 <- ggplot(data = summaries)+
+#  geom_line(aes(x = etas[,4], y = `Prop Op`, color = "Op"))+
+#  geom_line(aes(x = etas[,4], y = `Prop Cov`, color = "Cov"))+
+#  geom_line(aes(x = etas[,4], y = `Prop Death`, color = "Death"), linetype = 2)+
+#  geom_line(aes(x = etas[,4], y = `Prop Cens`, color = "Cens"), linetype = 2)+
+#  geom_line(aes(x = etas[,4], y = `Prop FU Cens`, color = "FU Cens"), linetype = 2)+
+#  scale_color_manual(values = c("red3", "blue2", "green3", "purple3", "pink"))
+#
+#gridExtra::grid.arrange(p1, p2, ncol = 2)
+```
+
+# Investigating model misspecifications
+
+Function for fitting and extracting model estimates, when the model is specified correctly, misspecified in terms of missing time varying covariate effect and misspecified in terms of missing operation effect.  
+
+```{r}
+fit_mod_set1(set1_data)
+```
+Analysing error in modelsspecifications with repeated simulations. 
+
+```{r}
+# TODO: inkorporer followup i den her
+set.seed(9457)
+try1 <- sys_invest(N = 400, eff_A_D = -1, timefix = TRUE)
+try2 <- sys_invest(N = 400, eff_L_A = 2, eff_L_D = 2, eff_A_D = -1, timefix = FALSE)
+try3 <- sys_invest(N = 400, eff_L_A = 3, eff_L_D = 3, eff_A_D = -1, timefix = FALSE) # This runs only with the timefix = FALSE
+```
+
+Histograms of the estimates when the models are misspecified:
+
+```{r}
+try1$pp3
+try2$pp3
+try3$pp3 # Jeg tror at modellerne nogle gange fejler og estimerer Cens L meget stort...?
+# Det er mærkeligt at plotet ikke kommer frem, estimaterne er der, hvis man fjerner de to meget ekstreme estimater
+# er bias heller ikke så stort
+
+#jpeg(filename = "hidden_confounder.jpg", width = 600)
+#try3$pp3
+#dev.off()
+```
+
+Bias:
+
+```{r}
+try1$Bias
+try2$Bias
+try3$Bias
+```
+
+Der er bias i dødsprocessen (hidden confounder).
+
+Confidence intervals:
+
+```{r}
+quant_data <- try1$data
+CIs <- quant_data[, .(Q2.5 = quantile(`Fully Specified`, 0.025),
+               Q97.5 = quantile(`Fully Specified`, 0.975)), by = "Est"]
+
+# The estimates are very spread out...
+CIs
+# But the 95 confidence intervals contain the true parameters
+(CIs[,2] <= quant_data[1:nrow(CIs),True])  & (quant_data[1:nrow(CIs),True]  <= CIs[,3])
+
+# With the hidden confounder, this is not the case (at least in the extreme case)
+quant_data <- try3$data
+CIs <- quant_data[, .(Q2.5 = quantile(`-L`, 0.025, na.rm = TRUE),
+               Q97.5 = quantile(`Fully Specified`, 0.975, na.rm = TRUE)), by = "Est"]
+
+(CIs[,2] <= quant_data[1:nrow(CIs),True])  & (quant_data[1:nrow(CIs),True]  <= CIs[,3])
+```
+
+## Why do we get the errors???
+
+Example of errors
+
+```{r}
+data2 <- sim_data_setting1(N = 20000, beta_L_A = 2, beta_L_D = 3, beta_A_D = -0.5,
+                           nu = rep(1.3,4), eta= rep(0.01,4))
+data1 <- sim_data_setting1(N = 20000, beta_L_A = 2, beta_L_D = 3, beta_A_D = -0.5)
+
+# when we fit a model here, we get errors
+trans_data <- trans_int_data(data1)
+trans_data[, at_risk_oper := as.numeric(A == 0)]
+trans_data[, at_risk_cov := as.numeric(L == 0)]
+
+survfit_oper <- coxph(Surv(tstart, tstop, Delta == 0) ~ L0 + L,
+                      data = trans_data[at_risk_oper == 1], cluster = ID)
+survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0 + A + L,
+                       data = trans_data, cluster = ID)
+survfit_cens <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A + L,
+                      data = trans_data, cluster = ID)
+survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0 + A,
+                     data = trans_data[at_risk_cov == 1], cluster = ID)
+coefficients(survfit_oper); coefficients(survfit_death); coefficients(survfit_cens); coefficients(survfit_cov) 
+```
+
+We examine data
+```{r}
+summary_sim_event(data1)
+```
+Looks quite reasonable. We look at the length of the intervals
+```{r}
+newdata <- trans_data[, .(intlength= (tstop - tstart))]
+
+# Der er nogle intervaller som er meget små
+shorties <- which(newdata$intlength <= 10^(-3))
+newdata[shorties,] # de er helt vildt små! (e-15)
+trans_data[shorties, Delta] |> as.factor() |> summary() # Flest Type 1 events (død)
+trans_data[shorties, table(Delta,at_risk_cov)]
+trans_data[shorties, k] |> as.factor() |> summary() # Og flest når det er event nummer 2
+trans_data[shorties, at_risk_oper] |> as.factor() |> summary() # og når der ikke har været en operation
+trans_data[shorties, at_risk_cov] |> as.factor() |> summary() # og når der har været et covariate skifte
+```
+The interval lengths are incredibly small...
+
+```{r}
+newdata$intlength |> mean() 
+newdata$intlength |> quantile(c(0.025, 0.975)) 
+```
+We try to remove the very small intervals
+```{r}
+trans_data_minusobs <- trans_data[-shorties,]
+
+
+trans_data_minusobs[, at_risk_oper := as.numeric(A == 0)]
+trans_data_minusobs[, at_risk_cov := as.numeric(L == 0)]
+
+# True models:
+survfit_oper <- coxph(Surv(tstart, tstop, Delta == 0) ~ L0 + L,
+                      data = trans_data_minusobs[at_risk_oper == 1], cluster = ID)
+survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0 + A + L,
+                       data = trans_data_minusobs, cluster = ID)
+survfit_cens <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A + L,
+                      data = trans_data_minusobs, cluster = ID)
+survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0 + A,
+                     data = trans_data_minusobs[at_risk_cov == 1], cluster = ID)
+
+survfit_oper$coefficients; survfit_death$coefficients; survfit_cens$coefficients; survfit_cov$coefficients
+```
+
+Hvis vi fjerner de meget meget små intervaller, så går det godt... Med timefix = FALSE får vi estimaterne:
+
+```{r}
+survfit_oper1 <- coxph(Surv(tstart, tstop, Delta == 0) ~ L0 + L, timefix = FALSE,
+                      data = trans_data[at_risk_oper == 1], cluster = ID)
+survfit_death1 <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0 + A + L,
+                       data = trans_data, cluster = ID, timefix = FALSE)
+survfit_cens1 <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A + L,
+                      data = trans_data, cluster = ID, timefix = FALSE)
+survfit_cov1 <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0 + A, timefix = FALSE,
+                     data = trans_data[at_risk_cov == 1], cluster = ID)
+
+survfit_oper1$coefficients; survfit_death1$coefficients; survfit_cens1$coefficients; survfit_cov1$coefficients
+```
+Man får lidt forskellige, men meget ens resultater, men vi har også virkelig mange observationer...
+
+Plot of intensities, i base case ish:
+```{r}
+beta <- matrix(ncol = 4, nrow = 4)
+# A0 is 0
+beta[3,] <- 0
+# L0 increases the probability of L = 1 and A = 1
+beta[1,c(1,4)] <- c(1,1)
+# L=1 increases the probability of A = 1
+beta[4,1] <- 2
+# A=1 decreases the risk of death
+beta[2,2] <- -1
+# L0,L=1 increases the risk of death
+beta[c(1,4),2] <- c(1, 2)
+# Censorering does not depend on anything
+beta[,3] <- 0
+
+# A = 1 does not affect the intensity of A (the event occurs only once)
+beta[2,1] <- 0
+# L = 1 does not affect the intensity of L (the event occurs only once)
+beta[4,4] <- 0
+# My assumption: A = 1 decreases the risk of L = 1
+beta[2,4] <- -0.5
+
+nu <- 1.1
+eta <- 0.1
+
+A <- 1
+L <- 1
+L0 <- 0.5
+
+lambda_A <- function(t) {
+  eta * nu * t ^ (nu - 1) * exp(L0 * beta[1,1] + A * beta[2,1] + L* beta[4,1])
+}
+lambda_D <- function(t) {
+  eta * nu * t ^ (nu - 1) * exp(L0 * beta[1,2] + A * beta[2,2] + L* beta[4,2])
+}
+lambda_C <- function(t) {
+  eta * nu * t ^ (nu - 1) * exp(L0 * beta[1,3] + A * beta[2,3] + L* beta[4,3])
+}
+lambda_L <- function(t) {
+  eta * nu * t ^ (nu - 1) * exp(L0 * beta[1,4] + A * beta[2,4] + L* beta[4,4])
+}
+
+ggplot()+
+  geom_function(fun = lambda_A, aes(color = "A"))+
+  geom_function(fun = lambda_D, aes(color = "D"))+
+  geom_function(fun = lambda_C, aes(color = "C"))+
+  geom_function(fun = lambda_L, aes(color = "L"))+
+  scale_color_manual(values = c("A" = "red4", "D" = "blue3", "C" = "lightblue3", "L" = "purple2"))
+```
+
+```{r}
+L <- 0
+lambda_nu_high <- function(t) {
+  eta * 1.5 * t ^ (1.5 - 1) * exp(L0 * beta[1,1] + A * beta[2,1] + L* beta[4,1])
+}
+lambda_nu_low <- function(t) {
+  eta * 1.05 * t ^ (1.05 - 1) * exp(L0 * beta[1,1] + A * beta[2,1] + L* beta[4,1])
+}
+lambda_eta_high <- function(t) {
+  0.3 * nu * t ^ (nu - 1) * exp(L0 * beta[1,3] + A * beta[2,3] + L* beta[4,3])
+}
+lambda_eta_low <- function(t) {
+  0.01 * nu * t ^ (nu - 1) * exp(L0 * beta[1,4] + A * beta[2,4] + L* beta[4,4])
+}
+
+ggplot()+
+  geom_function(fun = lambda_nu_high, aes(color = "nu high"))+
+  geom_function(fun = lambda_nu_low, aes(color = "nu low"))+
+  geom_function(fun = lambda_eta_high, aes(color = "eta high"))+
+  geom_function(fun = lambda_eta_low, aes(color = "eta low"))+
+  scale_color_manual(values = c("nu high" = "red4", "nu low" = "blue3", "eta high" = "lightblue3", "eta low" = "purple2"))
+```
+
+Umiddelbart ser det mest fornuftigt ud hvis vi vælger $\eta = 0.01$ og $\nu = 1.5$.
+
+
+```{r}
+lambda_reasonable <- function(t) {
+  0.01 * 1.4 * t ^ (1.3 - 1) * exp(L0 * beta[1,4] + A * beta[2,4] + L* beta[4,4])
+}
+
+ggplot()+
+  geom_function(fun = lambda_reasonable, aes(color = "Reasonable"))+
+  scale_color_manual(values = c("Reasonable" = "red4"))
+```
+
+
+
+
