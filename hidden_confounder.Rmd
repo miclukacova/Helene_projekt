@@ -22,6 +22,13 @@ theme_set(theme_bw())
 source("~/Helene_projekt/funcs_for_two_settings.R")
 ```
 
+In the following we simulate healthcare data from a setting with 4 different types of events: Death, Censoring, confounding Event (L) and Treatment (A). Death and Censoring are terminal events and each individual can experience the confounding Event and Treatment once. The purpose of the following is to investigate how failing to account for the confounder affects the analysis of the data. There is an initial covariate $L0$ that affects the intensities of the different events. *For now it is uniform on $(0,1)$, but we would like to make it uniform on $(50,60)$ and let it represent age. Furthermore we would like to add an additional binary covariate representing sex.* The intensities of the different events follow the form
+
+$$\lambda_{x}(t) =  R^x(t) \lambda_{0}(x,t)\phi(x,t)$$
+The function $R^x(t)$ is an at risk indicator. The baseline hazard is specified as
+$$\lambda_{0}(x,t)=\eta_x \nu_x t^{\nu_x-1} $$
+And
+$$\phi(x,t) = \exp (\beta_{L_0 \to x} L_0 + \beta_{A \to x} A + \beta_{L \to x} L)$$
 
 # Interventions
 

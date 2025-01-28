@@ -41,7 +41,7 @@ source("~/Helene_projekt/funcs_for_two_settings.R")
 #survfit_cov$coefficients
 ```
 
-In the following we simulate healthcare data from a setting with 3 different types of events: Death, Censoring and T2D. Death and Censoring are terminal events and each individual can be diagnosed with T2D once. There is an initial covariate $L0$ that affects the intensities of the different events. *For now it is uniform on $(0,1)$, but we would like to make it uniform on $(50,60)$ and let it represent age. Furthermore we would like to add an additional binary covariate representing sex.* The intensities of the different events follow the form
+In the following we simulate healthcare data from a setting with 3 different types of events: Death, Censoring and T2D. Death and Censoring are terminal events and each individual can be diagnosed with T2D once. There is an initial covariate $L_0$ and initial treatment $A_0$ that affects the intensities of the different events. *For now the covariates is uniform on $(0,1)$, but we would like to make it uniform on $(50,60)$ and let it represent age. Furthermore we would like to add an additional binary covariate representing sex.* The intensities of the different events follow the form
 
 $$\lambda_{x}(t) =  R^x(t) \lambda_{0}(x,t)\phi(x,t)$$
 The function $R^x(t)$ is an at risk indicator. The baseline hazard is specified as
