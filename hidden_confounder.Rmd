@@ -42,7 +42,7 @@ data0 <- sim_data_setting1(N = 5000, cens = 0)
 
 ```{r}
 data0[, at_risk_oper := as.numeric(A == 0)]
-survfit <- survreg(Surv(Time, Delta == 0) ~ L0 + L, 
+survfit <- survreg(Surv(Time, Delta == 2) ~ L0 + L, 
                    data = data0[at_risk_oper == 1], 
                    cluster = ID,
                    dist='weibull')

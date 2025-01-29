@@ -9,6 +9,14 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 
+```{r}
+# Functions
+
+L0_to_age <- function(L0, min, max) L0 *(max - min) + min
+
+```
+
+
 ```{r libraries, include=FALSE}
 # Libraries
 library(data.table)
@@ -18,27 +26,8 @@ library(survival)
 library(rtmle)
 library(ggplot2)
 library(microbenchmark)
+library(prodlim)
 theme_set(theme_bw())
-source("~/Helene_projekt/funcs_for_two_settings.R")
-```
-
-```{r, eval = FALSE, include = FALSE}
-#plot_event_data(set2a_data)
-#summary_sim_event(set2a_data)
-# Fitting models
-# Transform data into tstart tstop format
-#mod_data_a <- trans_int_data(set2a_fu_data)
-#mod_data_a[, at_risk_cov := as.numeric(L == 0)]
-## Fit models
-#survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0  + A0 + L, 
-#                       data = mod_data_a, cluster = ID)
-#survfit_cens <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A0 + L, 
-#                      data = mod_data_a, cluster = ID)
-#survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0 + A0, 
-#                     data = mod_data_a[at_risk_cov == 1], cluster = ID)
-#survfit_death$coefficients 
-#survfit_cens$coefficients 
-#survfit_cov$coefficients
 ```
 
 In the following we simulate healthcare data from a setting with 3 different types of events: Death, Censoring and T2D. Death and Censoring are terminal events and each individual can be diagnosed with T2D once. There is an initial covariate $L_0$ and initial treatment $A_0$ that affects the intensities of the different events. *For now the covariates is uniform on $(0,1)$, but we would like to make it uniform on $(50,60)$ and let it represent age. Furthermore we would like to add an additional binary covariate representing sex.* The intensities of the different events follow the form
@@ -50,20 +39,36 @@ And
 $$\phi(x,t) = \exp (\beta_{L_0 \to x} L_0 + \beta_{A_0 \to x} A_0 + \beta_{L \to x} L)$$
 # Inverstigation of the effect of drug on death
 
-We simulate from the T2D setting described above. We let the effect of T2D on Death, $\beta_{L \to D}$, vary from $0$ to $1$ by $0.1$. For each value of $\beta_{L \to D}$ we generate three data sets, where the effect of the initial treatment on the development of T2D is $0$, $0.5$ and $1$ respectively. For each data set we subset the people experiencing T2D. We set Time 0 to be the debut time of T2D. We estimate the survival function with the Kaplan Meyer estimator. For each fit we predict the survival probability 5 years after debut of T2D for a observation with $L_0 = 0.5$ and $A_0 = 0$ and $A_0 = 1$. That is a person on initial treatment, and a person not on initial treatment. All estimates are saved in a matrix. 
+The overall aim of the project is to investigate how to analyse if a drug which has an established beneficial effect on an intermediate event (onset of diabetes is delayed for people taking the drug) has an additional benefit on a terminal event (death). 
+
+Intuitively it seems that we have answered this question by answering the specific questions
+
+- What is the effect of the drug on the probability of T2D?
+- What is the effect of the drug on the probability of death?
+- What is the effect of the drug on the probability of death among T2D subjects?
+
+However, assume that it is also well-known that the intermediate event is a risk factor for the terminal event. Then the effect of the drug on the terminal event could be 100% mediated through the intermediate event. The (naively asked) question is if using and having used the drug helps people when they get diabetes. The major challenge is the selection of the people in the study over time: people are randomized at the start of the study but at the onset of diabetes they are not randomized anymore:
+
++ people who are already dead are not there anymore but if the drug has an effect on death then the people who take the drug live longer and hence are more likely to get diabetes.
++ people are older in the treatment arm at the onset of diabetes due to the beneficial effect of the drug on preventing diabetes
+
+## Effect of ...
+
+We simulate from the T2D setting described above. We let the effect of T2D on Death, $\beta_{L \to D}$, vary from $0$ to $1$ by $0.1$. For each value of $\beta_{L \to D}$ we generate three data sets, where the effect of the initial treatment on the development of T2D is $0$, $-0.5$ and $-1$ respectively. For each data set we subset the people experiencing T2D. We set Time 0 to be the debut time of T2D. We estimate the survival function with the Kaplan Meyer estimator. For each fit we predict the survival probability 5 years after debut of T2D for a observation with $L_0 = 0.5$ and $A_0 = 0$ and $A_0 = 1$. That is a person on initial treatment, and a person not on initial treatment. We also estimate the absolute risk of developing T2D for people on Treatment and people not on Treatment. All estimates are saved in matrices.  
 
 ```{r}
 diff_betas <- seq(0,1,by = 0.1)
-N <- 500
+N <- 10^4
 B <- length(diff_betas)
 
 ests <- matrix(nrow = B, ncol = 2*3)
+probs <- matrix(nrow = B, ncol = 2*3)
 
 for(b in 1:B){
   print(b)
   data0 <- sim_data_setting2(N = N, beta_L_D = diff_betas[b], beta_A0_L = 0)
-  data0.5 <- sim_data_setting2(N = N, beta_L_D = diff_betas[b], beta_A0_L = 0.5)
-  data1 <- sim_data_setting2(N = N, beta_L_D = diff_betas[b], beta_A0_L = 1)
+  data0.5 <- sim_data_setting2(N = N, beta_L_D = diff_betas[b], beta_A0_L = -0.5)
+  data1 <- sim_data_setting2(N = N, beta_L_D = diff_betas[b], beta_A0_L = -1)
   
   index <- 0
   for(data in list(data0,data0.5, data1)){
@@ -77,31 +82,60 @@ for(b in 1:B){
     # Kaplan meyer fit
     fit <- prodlim(Hist(Time_T2D, Status) ~ L0 + A0, data = T2D_peeps)
     
-    # Save estimate
+    # Save estimate of survival probability
     preds <- predict(fit, times = 5, newdata = data.frame(L0 = c(0.5,0.5), A0 = c(0,1)))
     ests[b,(index + 1)] <- preds$`L0=0.5, A0=0`
     ests[b,(index + 2)] <- preds$`L0=0.5, A0=1`
+    
+    # Save estimate of absolute risk of developing T2D for people on Treatment and people not on Treatment
+    probs[b,(index + 1)] <- nrow(T2D_events[A0 == 1 & Time < 5])/N
+    probs[b,(index + 2)] <- nrow(T2D_events[A0 == 0 & Time < 5])/N
+    
     index <- index + 2
   }
 }
 ```
 
-Difference in survival probability between subjects on Drug and subjects not on Drug, for different effects of the Drug. 
+Risk of diabetes for different effects of the Drug. 
 ```{r}
-plot_data <- data.table("No effect of drug on T2D" = ests[,2] - ests[,1], 
-           "Effect of drug on T2D" = ests[,4] - ests[,3], 
-           "Large effect of drug on T2D" = ests[,6] - ests[,5],
-           beta = rep(diff_betas,2))
+data.table(probs = c(probs),
+                        group = c(rep("A0 = 1, No effect", 11), rep("A0 = 0, No effect", 11),
+                                  rep("A0 = 1, Small effect", 11), rep("A0 = 0, Small effect", 11),
+                                  rep("A0 = 1, Large effect", 11), rep("A0 = 0, Large effect", 11)),
+                        beta = rep(diff_betas,6)) |>
+  ggplot()+
+  geom_line(aes(x = beta, y = probs, colour = group))+
+  ylab("Proportion of individuals with T2D")+
+  xlab("Effect of T2D on Death")+
+  labs(title = "Absolute risk of T2D")
+```
+Survival probability between subjects on Drug and subjects not on Drug, for different effects of the Drug. 
+```{r}
+data.table(ests = c(ests),
+                        group = c(rep("A0 = 1, No effect", 11), rep("A0 = 0, No effect", 11),
+                                  rep("A0 = 1, Small effect", 11), rep("A0 = 0, Small effect", 11),
+                                  rep("A0 = 1, Large effect", 11), rep("A0 = 0, Large effect", 11)),
+                        beta = rep(diff_betas,6)) |>
+  ggplot()+
+  geom_line(aes(x = beta, y = ests, colour = group))+
+  ylab("Estimated survival probability")+
+  xlab("Effect of T2D on Death")+
+  labs("5 year survival probability since T2D")
 ```
 
-Plot
+Difference in survival probability between subjects on Drug and subjects not on Drug, for different effects of the Drug. 
 ```{r}
-ggplot(plot_data)+
-  geom_line(aes(x = beta, y = "No effect of drug on T2D", colour = "0"))+
-  geom_line(aes(x = beta, y = "Effect of drug on T2D", colour = "0.5"))+
-  geom_line(aes(x = beta, y = "Large effect of drug on T2D", colour = "1"))+
-  ylab("Estimated survival probability for different effects of T2D on Death")+
-  scale_color_manual(values = c("darkolivegreen", "darkblue", "hotpink"))
+data.table(No_effect = ests[,2] - ests[,1], 
+           Effect = ests[,4] - ests[,3], 
+           Large_effect = ests[,6] - ests[,5],
+           beta = rep(diff_betas,2)) |> 
+  ggplot()+
+  geom_line(aes(x = beta, y = No_effect, colour = "No effect of drug on T2D"))+
+  geom_line(aes(x = beta, y = Effect, colour = "Small effect of drug on T2D"))+
+  geom_line(aes(x = beta, y = Large_effect, colour = "Large effect of drug on T2D"))+
+  ylab("Estimated survival probability")+
+  scale_color_manual(values = c("darkolivegreen", "darkblue", "hotpink"))+
+  xlab("Effect of T2D on Death")+
   labs("5 year survival probability since T2D")
 ```
 
