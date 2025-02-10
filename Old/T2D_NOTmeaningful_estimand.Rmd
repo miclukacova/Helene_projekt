@@ -57,11 +57,11 @@ mod_data_a <- trans_int_data(set2a_fu_data)
 mod_data_a[, at_risk_cov := as.numeric(L == 0)]
 
 # Fit models
-survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0  + A0 + L, 
+survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ I(L0 / 50) + A0 + L + L1, 
                        data = mod_data_a, cluster = ID)
-survfit_cens <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A0 + L, 
+survfit_cens <- coxph(Surv(tstart, tstop, Delta == 0) ~ I(L0 / 50) + A0 + L + L1, 
                       data = mod_data_a, cluster = ID)
-survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0 + A0, 
+survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ I(L0 / 50) + A0 + L1, 
                      data = mod_data_a[at_risk_cov == 1], cluster = ID)
 
 survfit_death$coefficients 

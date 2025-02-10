@@ -128,14 +128,14 @@ plot_compare(res4, diff_betas = seq(-1,0,by = 0.1))+
       labs(title = "3 year survival probability since T2D")
 ```
 
-When the drug has an effect on Death, the survival probability after T2D diagnose is larger in the Treatment Group. Quite interestingly this survival probability does not depend on the size of the effect of the drug on T2D. This is weird since the larger the effect of the drug, the older the T2D treatment group. 
+When the drug has an effect on Death, the survival probability after T2D diagnose is larger in the Treatment Group. Quite interestingly this survival probability does not depend on the size of the effect of the drug on T2D. This is weird since one would imagine that the larger the effect of the drug, the older the T2D treatment group, the larger the intensity of Death and the smaller survival probability. 
 As the effect of the drug on Death decreases, the survival probability approaches the one in the placebo group.  
 
 ## Covariate differences
 
 We look into the differences between the Treatment group and the placebo group in different scenarios.
 
-We simulate data where the effect of the drug on the development og T2D is repsectively 0, -0.5, -1. And the effect of the drug on Death is -0.1. 
+We simulate data where the effect of the drug on the development of T2D is repsectively 0, -0.5, -1. And the effect of the drug on Death is -0.1. 
 
 ```{r}
 data0 <- sim_data_setting2(N = 10^4, beta_L_D = 1, beta_A0_D = -0.1,
@@ -165,23 +165,24 @@ T2D_events1[, .(Time_mean = mean(Time)), by = A0]
 T2D_events1[, .N, by = A0]
 ```
 
-Apparently both groups have same average baseline covariate, irrespective of the effect of the drug on T2D. Since the effect of L0 on development of T2D and on death
-
-But the larger the effect of the drug the later the patients in the Treatment group. 
-
-```{r}
-# Find proportion of men and women after T2D diagnose
-```
-
+Apparently both groups have same average baseline covariate, irrespective of the effect of the drug on T2D. But the larger the effect of the drug the later the patients in the Treatment group develop T2D. The number of patients developing T2D is equal for both groups when there is no effect of the drug. but fewer and fewer patients in the Treatment arm develop T2D as the effect of the drug increases due to censoring and death. 
 
 ## Helene forslag
 
 *Generate large data*
 
 ```{r}
-N <- 50000
-data_A <- sim_data_setting2(N = N, beta_L_D = 1, cens = 0)
+N <- 15000
+data_A <- sim_data_setting2(N = N, beta_L_D = 1, cens = 0, beta_A0_L = 1)
 data_A[, at_risk_cov := as.numeric(L == 0)]
+data_A_t <- trans_int_data(data_A)
+
+survfit <- coxph(Surv(tstart, tstop, Delta == 3) ~ I(L0 / 50) + L1 + A0,
+                      data = data_A_t[at_risk_cov == 1],
+                      timefix = FALSE,
+                      cluster = ID)
+
+survfit$coefficients
 ```
 
 *Grouping data based on treatment*
@@ -195,27 +196,29 @@ treat_group <- data_A[A0 == 1]
 
 I feel like there is something going wrong here
 ```{r}
-survfit <- survreg(Surv(Time, Delta == 3) ~ L0, 
+survfit <- survreg(Surv(Time, Delta == 3) ~ I(L0 / 50) + L1, 
                    data = no_treat_group[at_risk_cov == 1], 
                    cluster = ID,
                    dist='weibull')
 
-survfit1 <- survreg(Surv(Time, Delta == 3) ~ L0, 
-                   data = treat_group[at_risk_cov == 1], 
+survfit1 <- survreg(Surv(Time, Delta == 3) ~ I(L0 / 50) + L1 + A0, 
+                   data = data_A[at_risk_cov == 1], 
                    cluster = ID,
                    dist='weibull')
 ```
 
 
-Estimates
+Estimates in no treatment group
 ```{r}
 nu_est <- 1/survfit$scale; nu_est
 eta_est <- 1/exp(survfit$coefficients[1]); eta_est
 beta_l0_l_est <- - survfit$coefficients[2] / survfit$scale; beta_l0_l_est
+beta_l1_l_est <- - survfit$coefficients[3] / survfit$scale; beta_l1_l_est
 
 1/survfit1$scale
 1/exp(survfit1$coefficients[1])
 - survfit1$coefficients[2] / survfit1$scale
+- survfit1$coefficients[4] / survfit1$scale
 ```
 
 *Generate large data set under the intervened intensity *
@@ -235,9 +238,10 @@ data_new_no_int <- sim_data_setting2(N = N, cens = 0)
 
 *Proportion of subjects dying before some time $\tau$*
 ```{r}
-tau <- 5
+tau <- 3
 mean(data_new[Delta == 1, Time] < tau) # with intervention
 mean(data_new_no_int[Delta == 1, Time] < tau) # without intervention
 ```
+A bit more dead under intervened intensity. 
 
 
