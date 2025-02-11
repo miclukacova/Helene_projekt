@@ -48,14 +48,16 @@ $$\phi(x,t) = \exp \left(\frac{\beta_{L_0, x}}{50} L_0  + \beta_{L_1, x} L_1 + \
 ## Probability of getting T2D 
 
 Let $T$ be the random variable representing the time of being diagnosed with T2D. We in the following estimate
-$$ P(T \leq 5, A_0 = 1) \quad , \quad P(T \leq 5, A_0 = 1)$$
+$$ P(T \leq 5 | A_0 = 1) \quad , \quad P(T \leq 5 | A_0 = 1)$$
 By 
-$$ \hat{P}(T \leq 5, A_0 = 1) = \frac{\sum_{i=1}^N 1(T_i \leq 5, A_0 =1)}{N} \quad , \quad \hat{P}(T \leq 5, A_0 = 0) = \frac{\sum_{i=1}^N 1(T_i \leq 5,  A_0 =0)}{N}$$
+$$ \hat{P}(T \leq 5 | A_0 = 1) = \frac{\sum_{i=1}^N 1(T_i \leq 5, A_0 =1)}{N} \quad , \quad \hat{P}(T \leq 5 | A_0 = 0) = \frac{\sum_{i=1}^N 1(T_i \leq 5,  A_0 =0)}{N}$$
 Where $T_i$ is the time of the T2D diagnose of individual $i$. 
 
 We simulate from the T2D setting described above. We let the effect of T2D on Death, $\beta_{L \to D}$, vary from $0$ to $1$ by $0.1$. For each value of $\beta_{L \to D}$ we generate three data sets, where the effect of the initial treatment on the development of T2D is $0$, $-0.5$ and $-1$ respectively. For each data set we estimate the probabilities  $P(T \leq 5, A_0 = 1)$ and $P(T \leq 5 A_0 = 1)$
 
 ```{r}
+N <- 3000
+
 estimator1 <- function(data, N) {
   # Finding all the T2D people and setting T_0 to debut time of diabetes
     T2D_events <- data[Delta == 3]
@@ -66,7 +68,7 @@ estimator1 <- function(data, N) {
 ```
 
 ```{r}
-res1 <- compare_effects(estimator = estimator1, N = 5000, beta_L_D = seq(0,1,by = 0.1))
+res1 <- compare_effects(estimator = estimator1, N = N, beta_L_D = seq(0,1,by = 0.1))
 plot_compare(res1) +
       ylab("Probability of T2D after 5 years")+
       xlab("Effect of T2D on Death")
@@ -76,7 +78,7 @@ We see that the probability of getting T2D is reduced by the drug (as we have si
 We now vary the effect of the Drug on Death $\beta_{A_0 \to D}$, and see how this affects the T2D probability.  
 
 ```{r}
-res2 <- compare_effects(estimator = estimator1, N = 5000, beta_A0_D = seq(-1,0,by = 0.1))
+res2 <- compare_effects(estimator = estimator1, N = N, beta_A0_D = seq(-1,0,by = 0.1))
 plot_compare(res2, plot_no = 1, diff_betas <- seq(-1,0,by = 0.1)) +
       ylab("Probability of T2D after 5 years")+
       xlab("Effect of Drug on Death")
@@ -87,17 +89,23 @@ For the people on treatment the probability of getting T2D after 5 years is larg
 ## Survival probability 3 years after debut of T2D
 
 Let $U$ be the random variable representing time of death after being diagnosed with T2D. We in the following estimate
-$$ P(U > 3, A_0 = 1, L_0 = 0.5, L_1 = 0) \quad , \quad P(U > 3, A_0 = 0, L_0 = 0.5, L_1 = 0)$$
+$$ P(U > 3 | A_0 = 1, L_0 = 0.5, L_1 = 0) \quad , \quad P(U > 3 | A_0 = 0, L_0 = 0.5, L_1 = 0)$$
 
 We estimate the survival probabilities by simulating data as previously. For each data set we estimate the survival function with the Kaplan Meyer estimator. For each fit we predict the survival probability 3 years after debut of T2D for an observation with $L_0 = 0.5$, $L1 = 0$ and $A_0 = 0$ and $A_0 = 1$. That is a person on initial treatment, and a person not on initial treatment. 
 
 ```{r}
 estimator2 <- function(data, N) {
-  # Finding all the T2D people and setting T_0 to debut time of diabetes
+    # Finding all the T2D people 
     T2D_events <- data[Delta == 3]
     T2D_peeps <- data[ID %in% T2D_events$ID]
+    
+    # Setting T_0 to debut time of diabetes
     T2D_peeps[, Time_T2D := Time - min(Time), by = ID]
+    
+    # Removing the new Time 0
     T2D_peeps <- T2D_peeps[Delta != 3]
+    
+    # Creating a status variable
     T2D_peeps[, Status := Delta == 1]
     
     # Kaplan meyer fit
@@ -108,71 +116,123 @@ estimator2 <- function(data, N) {
     return(c(preds$`L0=0.5, L1=0, A0=0`, preds$`L0=0.5, L1=0, A0=1`))
 }
 
-res3 <- compare_effects(estimator = estimator2, N = 10000, beta_L_D = seq(0,1,by = 0.1))
-res4 <- compare_effects(estimator = estimator2, N = 10000, beta_A0_D = seq(-1,0,by = 0.1))
+res3 <- compare_effects(estimator = estimator2, N = N, beta_L_D = seq(0,1,by = 0.1))
+res4 <- compare_effects(estimator = estimator2, N = N, beta_A0_D = seq(-1,0,by = 0.1))
 ```
 
 Visual illustration 
 ```{r}
-plot_compare(res3)+
+plot_compare(res3, diff_betas= seq(0,1,by = 0.1))+
       ylab("Estimated survival probability")+
       xlab("Effect of T2D on Death")+
       labs(title = "3 year survival probability since T2D")
 ```
-We see that as the effect of T2D on Death increases, the probability of survival decreases. It does so equally for both treatment and placebo group and for all effects of the drug on T2D. This makes sense as the drug only affects death through a later T2D diagnose. After the diagnose, both groups stand equally well. Hmm... what about the difference in age between the two groups?
+We see that as the effect of T2D on Death increases, the probability of survival decreases. It does so equally for both treatment and placebo group and for all effects of the drug on T2D. This is surprising since one would think that the age difference between the two groups would play a role. We will investigate this further in the following. 
 
 ```{r}
-plot_compare(res4, diff_betas = seq(-1,0,by = 0.1))+
+plot_compare(res4, diff_betas= seq(-1,0,by = 0.1))+
       ylab("Estimated survival probability")+
       xlab("Effect of Drug on Death")+
       labs(title = "3 year survival probability since T2D")
 ```
 
-When the drug has an effect on Death, the survival probability after T2D diagnose is larger in the Treatment Group. Quite interestingly this survival probability does not depend on the size of the effect of the drug on T2D. This is weird since one would imagine that the larger the effect of the drug, the older the T2D treatment group, the larger the intensity of Death and the smaller survival probability. 
-As the effect of the drug on Death decreases, the survival probability approaches the one in the placebo group.  
+When the drug has an effect on Death, the survival probability after T2D diagnose is larger in the Treatment Group. Quite interestingly this survival probability does not depend on the size of the effect of the drug on T2D. This is weird since one would imagine that the larger the effect of the drug, the older the T2D treatment group, the larger the intensity of Death and the smaller survival probability. This is the same effect we were pondering about above, and we will look into this below. As the effect of the drug on Death decreases, the survival probability approaches the one in the placebo group. 
 
 ## Covariate differences
 
 We look into the differences between the Treatment group and the placebo group in different scenarios.
 
-We simulate data where the effect of the drug on the development of T2D is repsectively 0, -0.5, -1. And the effect of the drug on Death is -0.1. 
+We simulate data where the effect of the drug on the development of T2D is respectively 0, -0.5, -1. And the effect of the drug on Death is -0.1. 
 
 ```{r}
-data0 <- sim_data_setting2(N = 10^4, beta_L_D = 1, beta_A0_D = -0.1,
+data0 <- sim_data_setting2(N = N, beta_L_D = 1, beta_A0_D = -0.1,
                            beta_L0_L = 1, beta_A0_L = 0)
-data0.5 <- sim_data_setting2(N = 10^4, beta_L_D = 1, beta_A0_D = -0.1,
+data0.5 <- sim_data_setting2(N = N, beta_L_D = 1, beta_A0_D = -0.1,
                            beta_L0_L = 1, beta_A0_L = -0.5)
-data1 <- sim_data_setting2(N = 10^4, beta_L_D = 1, beta_A0_D = -0.1,
+data1 <- sim_data_setting2(N = N, beta_L_D = 1, beta_A0_D = -0.1,
                            beta_L0_L = 1, beta_A0_L = -1)
 ```
 
 We find the average initial age, the average time of T2D diagnose and number of patients among respectively placebo and treatment T2D diagnosed patients.
 
 ```{r}
-T2D_events0 <- data0[Delta == 3]
-T2D_events0[, .(L0_mean = mean(L0)), by = A0]
-T2D_events0[, .(Time_mean = mean(Time)), by = A0]
-T2D_events0[, .N, by = A0]
+# T2D events
+T2D_events0 <- data0[Delta == 3]; T2D_events0.5 <- data0.5[Delta == 3]; T2D_events1 <- data0.5[Delta == 3]
 
-T2D_events0.5 <- data0.5[Delta == 3]
-T2D_events0.5[, .(L0_mean = mean(L0)), by = A0]
-T2D_events0.5[, .(Time_mean = mean(Time)), by = A0]
-T2D_events0.5[, .N, by = A0]
+# Mean baseline covariate of T2D diagnose
+cbind(rbind(T2D_events0[, .(L0_mean = mean(L0)), by = A0],
+      T2D_events0.5[, .(L0_mean = mean(L0)), by = A0],
+      T2D_events1[, .(L0_mean = mean(L0)), by = A0]), "Effect of Drug on T2D" = c(0,0,0.5,0.5,1,1))
 
-T2D_events1 <- data1[Delta == 3]
-T2D_events1[, .(L0_mean = mean(L0)), by = A0]
-T2D_events1[, .(Time_mean = mean(Time)), by = A0]
-T2D_events1[, .N, by = A0]
+# Mean time of T2D diagnose
+cbind(rbind(T2D_events0[, .(Time_mean = mean(Time)), by = A0],
+      T2D_events0.5[, .(Time_mean = mean(Time)), by = A0],
+      T2D_events1[, .(Time_mean = mean(Time)), by = A0]) , "Effect of Drug on T2D" = c(0,0,0.5,0.5,1,1))
+
+# Number of individuals with T2D diagnose
+cbind(rbind(T2D_events0[,  .N, by = A0],
+      T2D_events0.5[,  .N, by = A0],
+      T2D_events1[,  .N, by = A0]), "Effect of Drug on T2D" = c(0,0,0.5,0.5,1,1))
 ```
 
 Apparently both groups have same average baseline covariate, irrespective of the effect of the drug on T2D. But the larger the effect of the drug the later the patients in the Treatment group develop T2D. The number of patients developing T2D is equal for both groups when there is no effect of the drug. but fewer and fewer patients in the Treatment arm develop T2D as the effect of the drug increases due to censoring and death. 
+
+We now naively look into the proportion of placebo and treatment T2D diagnosed patients that die by some time $\tau$  
+
+```{r}
+T2D_peeps0 <- data0[ID %in% T2D_events0$ID]; T2D_peeps0.5 <- data0.5[ID %in% T2D_events0.5$ID]; 
+T2D_peeps1 <- data0[ID %in% T2D_events1$ID]
+
+# Proportion of placebo and treatment T2D people who have died before Time = 10 
+nrow(T2D_peeps0[Time < 10 & Delta == 1 & A0 == 1]) / length(unique(T2D_peeps0[A0 == 1]$ID))
+nrow(T2D_peeps0[Time < 10 & Delta == 1 & A0 == 0]) / length(unique(T2D_peeps0[A0 == 0]$ID))
+
+nrow(T2D_peeps0.5[Time < 10 & Delta == 1 & A0 == 1]) / length(unique(T2D_peeps0.5[A0 == 1]$ID))
+nrow(T2D_peeps0.5[Time < 10 & Delta == 1 & A0 == 0]) / length(unique(T2D_peeps0.5[A0 == 0]$ID))
+
+nrow(T2D_peeps0[Time < 10 & Delta == 1 & A0 == 1]) / length(unique(T2D_peeps0[A0 == 1]$ID))
+nrow(T2D_peeps0[Time < 10 & Delta == 1 & A0 == 0]) / length(unique(T2D_peeps0[A0 == 0]$ID))
+```
+
+The porportions are the same!
+
+**skrue på L0 coefficentens effekt på død**
+To investigate why the  two groups have the same average baseline covariate we change the effect that L0 has on Death to $0.3$, and investigate data in the same way as before. 
+
+```{r}
+data0 <- sim_data_setting2(N = N, beta_L_D = 1, beta_A0_D = -0.1,
+                           beta_L0_L = 1, beta_A0_L = 0, beta_L0_D = 0.3)
+data0.5 <- sim_data_setting2(N = N, beta_L_D = 1, beta_A0_D = -0.1,
+                           beta_L0_L = 1, beta_A0_L = -0.5, beta_L0_D = 0.3)
+data1 <- sim_data_setting2(N = N, beta_L_D = 1, beta_A0_D = -0.1,
+                           beta_L0_L = 1, beta_A0_L = -1, beta_L0_D = 0.3)
+```
+
+## Larger effect of time on intensity of death
+
+```{r}
+res5 <- compare_effects(estimator = estimator2, N = N, beta_L_D = seq(0,1,by = 0.1), nu = rep(1.3,4))
+res6 <- compare_effects(estimator = estimator2, N = N, beta_A0_D = seq(-1,0,by = 0.1), nu = rep(1.3,4))
+
+plot_compare(res5, diff_betas= seq(0,1,by = 0.1))+
+      ylab("Estimated survival probability")+
+      xlab("Effect of T2D on Death")+
+      labs(title = "3 year survival probability since T2D")
+
+plot_compare(res6, diff_betas= seq(-1,0,by = 0.1))+
+      ylab("Estimated survival probability")+
+      xlab("Effect of Drug on Death")+
+      labs(title = "3 year survival probability since T2D")
+```
+
+Increasing the effect of time on the intensities does not change the results...
 
 ## Helene forslag
 
 *Generate large data*
 
 ```{r}
-N <- 15000
+N <- 10^4
 data_A <- sim_data_setting2(N = N, beta_L_D = 1, cens = 0, beta_A0_L = 1)
 data_A[, at_risk_cov := as.numeric(L == 0)]
 data_A_t <- trans_int_data(data_A)
@@ -223,7 +283,7 @@ beta_l1_l_est <- - survfit$coefficients[3] / survfit$scale; beta_l1_l_est
 
 *Generate large data set under the intervened intensity *
 ```{r}
-N <- 10000
+N <- 10^4
 data_new <- sim_data_setting2(N = N, 
                               cens = 0,
                               eta = c(rep(0.1,3), eta_est),

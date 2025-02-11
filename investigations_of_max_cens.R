@@ -46,3 +46,5 @@ survfit_cov0 <- coxph(Surv(tstart, tstop, Delta == 3) ~ I(L0 / 50) + A + A0,
                      data = data_int0[at_risk_cov == 1],
                      cluster = ID)
 
+# Det giver mening at censorerings intensiteten bliver mærkelig. Hvis du er kommet så langt i 
+# forløbet at du har nået max cens, har du sikkert også hat en operation eller covariate change

@@ -22,20 +22,23 @@ theme_set(theme_bw())
 source("~/Helene_projekt/funcs_for_two_settings.R")
 ```
 
-In the following we simulate healthcare data from a setting with 4 different types of events: Death, Censoring, confounding Event (L) and Treatment (A). Death and Censoring are terminal events and each individual can experience the confounding Event and Treatment once. The purpose of the following is to investigate how failing to account for the confounder affects the analysis of the data. There is an initial covariate $L0$ that affects the intensities of the different events. *For now it is uniform on $(0,1)$, but we would like to make it uniform on $(50,60)$ and let it represent age. Furthermore we would like to add an additional binary covariate representing sex.* The intensities of the different events follow the form
+In the following we simulate healthcare data from a setting with 4 different types of events: Death, Censoring, Confounding Event (L) and Treatment (A). Death and Censoring are terminal events and each individual can experience the confounding Event and Treatment once. The purpose of the following is to investigate how failing to account for the confounder affects the analysis of the data. There are two baseline covariates $L0$ and $L1$ that affect the intensities of the different events. The distribution of the baseline covariate $L0$ is uniform on $(50,60)$ and can represent age. The covariate $L1$ takes values 0 and 1, and follows a binomial distribution with $p=0.5$, it can be interpreted as the sex of the individual. The intensities of the event $x \in \mathcal{X}$ follow the form
 
 $$\lambda_{x}(t) =  R^x(t) \lambda_{0}(x,t)\phi(x,t)$$
 The function $R^x(t)$ is an at risk indicator. The baseline hazard is specified as
 $$\lambda_{0}(x,t)=\eta_x \nu_x t^{\nu_x-1} $$
 And
-$$\phi(x,t) = \exp (\beta_{L_0 \to x} L_0 + \beta_{A \to x} A + \beta_{L \to x} L)$$
+$$\phi(x,t) = \exp (\beta_{L_0 \to x} L_0  + \beta_{L \to x} L + \beta_{A \to x} A + \beta_{L_1 \to x} L_1)$$
 
 # Interventions
 
-*1. Use simulation function to generate one dataset of reasonable size $n$.*
+*1. Use simulation function to generate one data set of reasonable size $n$.*
 
 ```{r}
-data0 <- sim_data_setting1(N = 5000, cens = 0)
+n <- 10^4
+data0 <- sim_data_setting1(N = n, cens = 0)
+
+
 ```
 
 *2. On that data, estimate a marginal intensity/hazard of operation; perhaps use a Weibull regression?*
@@ -63,7 +66,7 @@ beta_l_a_est <- - survfit$coefficients[3] / survfit$scale
 
 We generate two large data sets under the intervened intensity. One of them without any operation events. 
 ```{r}
-N <- 5000
+N <- 10^4
 
 data_under_int <- sim_data_setting1(N = N, cens = 0,
                                     eta = c(rep(0.1,3), eta_est),
