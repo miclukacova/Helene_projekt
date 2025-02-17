@@ -50,20 +50,26 @@ $$\phi(x,t) = \exp \left(\frac{\beta_{L_0, x}}{50} L_0  + \beta_{L_1, x} L_1 + \
 Let $T$ be the random variable representing time T2D diagnose. We in the following estimate
 $$ P(T \leq 5 | A_0 = 1) \quad , \quad P(T \leq 5 | A_0 = 1)$$
 By 
-$$ \hat{P}(T \leq 5 | A_0 = 1) = \frac{\sum_{i=1}^N 1(T_i \leq 5, A_0 =1)}{N} \quad , \quad \hat{P}(T \leq 5 | A_0 = 0) = \frac{\sum_{i=1}^N 1(T_i \leq 5,  A_0 =0)}{N}$$
+$$ \hat{P}(T \leq 5 | A_0 = 1) = \frac{\hat{P}(T \leq 5 , A_0 = 1)}{\hat{P}(A_0 = 1)}  \quad , \quad \hat{P}(T \leq 5 | A_0 = 0) = \frac{\hat{P}(T \leq 5 , A_0 = 0)}{\hat{P}(A_0 = 0)}$$
 Where $T_i$ is the time of the T2D diagnose of individual $i$. 
 
 We simulate from the T2D setting described above. We let the effect of T2D on Death, $\beta_{L \to D}$, vary from $0$ to $1$ by $0.1$. For each value of $\beta_{L \to D}$ we generate three data sets, where the effect of the initial treatment on the development of T2D is $0$, $-0.5$ and $-1$ respectively. For each data set we estimate the probabilities  $P(T \leq 5| A_0 = 1)$ and $P(T \leq 5| A_0 = 1)$
 
 ```{r}
-N <- 7000
+N <- 5000
 
 estimator1 <- function(data, N) {
   # Finding all the T2D people and setting T_0 to debut time of diabetes
     T2D_events <- data[Delta == 3]
     
-    # Save estimate of absolute risk of developing T2D for people on Treatment and people not on Treatment
-    return(c(nrow(T2D_events[A0 == 0 & Time < 5])/N, nrow(T2D_events[A0 == 1 & Time < 5])/N))
+    # Estimating probability of A0 = 1 and A0 = 0
+    p_a0_1 <- length(unique(data[A0 == 1, ID])) / N
+    p_a0_0 <- length(unique(data[A0 == 0, ID])) / N
+      
+    p_t_0 <- (nrow(T2D_events[A0 == 0 & Time < 5]) / N) / p_a0_0
+    p_t_1 <- (nrow(T2D_events[A0 == 1 & Time < 5]) / N) / p_a0_1
+    
+    return(c(p_t_0, p_t_1))
 }
 ```
 
@@ -116,11 +122,11 @@ estimator2 <- function(data, N) {
     T2D_peeps[, Status := Delta == 1]
     
     # Kaplan meyer fit
-    fit <- prodlim(Hist(Time_T2D, Status) ~ L0 + L1 + A0, data = T2D_peeps)
+    fit <- prodlim(Hist(Time_T2D, Status) ~ A0, data = T2D_peeps)
     
     # Save estimate of survival probability
-    preds <- predict(fit, times = 3, newdata = data.frame(L0 = c(50,50), A0 = c(0,1), L1 = c(0,0)))
-    return(c(preds$`L0=50, L1=0, A0=0`, preds$`L0=50, L1=0, A0=1`))
+    preds <- predict(fit, times = 3, newdata = data.frame(A0 = c(0,1)))
+    return(c(preds$`A0=0`, preds$`A0=1`))
 }
 
 res3 <- compare_effects(estimator = estimator2, N = N, beta_L_D = seq(0,1,by = 0.1))
@@ -145,223 +151,12 @@ plot_compare(res4, diff_betas= seq(-1,0,by = 0.1))+
 
 When the drug has an effect on Death, the survival probability after T2D diagnose is larger in the Treatment Group. Quite interestingly this survival probability does not depend on the size of the effect of the drug on T2D. This is weird since one would imagine that the larger the effect of the drug, the older the T2D treatment group, the larger the intensity of Death and the smaller survival probability. This is the same effect we were pondering about above, and we will look into this below. As the effect of the drug on Death decreases, the survival probability approaches the one in the placebo group. 
 
-## Covariate differences
 
-We look into the differences between the Treatment group and the placebo group in different scenarios.
-
-### When there is no effect of drug on death
-
-We simulate data where the effect of the drug on the development of T2D is respectively 0, -0.5, -1. And the effect of the drug on Death is 0. 
-
-```{r}
-data0 <- sim_data_setting2(N = 5 * 10^4, beta_L_D = 1, beta_A0_D = 0,
-                           beta_L0_L = 0, beta_A0_L = 0,
-                           cens = 0)
-data0.5 <- sim_data_setting2(N = 5 * 10^4, beta_L_D = 1, beta_A0_D = 0,
-                           beta_L0_L = 0, beta_A0_L = -0.5,
-                           cens = 0)
-data1 <- sim_data_setting2(N = 5 * 10^4, beta_L_D = 1, beta_A0_D = 0,
-                           beta_L0_L = 0, beta_A0_L = -1, beta_L0_D = 1,
-                           cens = 0)
-```
-
-We find the average initial age, the average time of T2D diagnose and number of patients among respectively placebo and treatment T2D diagnosed patients.
-
-```{r}
-# T2D events
-T2D_events0 <- data0[Delta == 3]; T2D_events0.5 <- data0.5[Delta == 3]
-T2D_events1 <- data1[Delta == 3]
-T2D_peeps0 <- data0[ID %in% T2D_events0$ID]; T2D_peeps0.5 <- data0.5[ID %in% T2D_events0.5$ID]; 
-T2D_peeps1 <- data1[ID %in% T2D_events1$ID]
-
-
-# Mean baseline covariate of T2D diagnose
-cbind(rbind(T2D_events0[, .(L0_mean = mean(L0)), by = A0],
-      T2D_events0.5[, .(L0_mean = mean(L0)), by = A0],
-      T2D_events1[, .(L0_mean = mean(L0)), by = A0]), "Effect of Drug on T2D" = c(0,0,-0.5,-0.5,-1,-1))
-
-gridExtra::grid.arrange(
-  ggplot(T2D_peeps0[Delta != 3])+
-    geom_histogram(aes(x = L0))+
-    facet_grid(~A0),
-  ggplot(T2D_peeps0.5[Delta != 3])+
-    geom_histogram(aes(x = L0))+
-    facet_grid(~A0),
-  ggplot(T2D_peeps1[Delta != 3])+
-    geom_histogram(aes(x = L0))+
-    facet_grid(~A0),
-  nrow = 2
-)
-```
-
-Both groups have a little bit larger than average baseline covariate.
-
-```{r}
-# Mean time of T2D diagnose
-gridExtra::grid.arrange(
-  ggplot(T2D_peeps0[Delta == 3])+
-    geom_histogram(aes(x = L0))+
-    facet_grid(~A0),
-  ggplot(T2D_peeps0.5[Delta == 3])+
-    geom_histogram(aes(x = L0))+
-    facet_grid(~A0),
-  ggplot(T2D_peeps1[Delta == 3])+
-    geom_histogram(aes(x = L0))+
-    facet_grid(~A0),
-  nrow = 1
-)
-```
-
-The larger the effect of the drug the later the patients in the Treatment group develop T2D.
-
-```{r}
-# Number of individuals with T2D diagnose
-cbind(rbind(T2D_events0[,  .N, by = A0],
-      T2D_events0.5[,  .N, by = A0],
-      T2D_events1[,  .N, by = A0]), "Effect of Drug on T2D" = c(0,0,-0.5,-0.5,-1,-1))
-```
-
-The number of patients developing T2D is equal for both groups when there is no effect of the drug. But fewer and fewer patients in the Treatment arm develop T2D as the effect of the drug increases due to censoring and death. 
-
-We now naively look into the proportion of placebo and treatment T2D diagnosed patients that die by some time $\tau$  
-
-```{r}
-# Setting T_0 to debut time of diabetes
-T2D_peeps0[, Time_T2D := Time - min(Time), by = ID]; T2D_peeps0.5[, Time_T2D := Time - min(Time), by = ID]
-T2D_peeps1[, Time_T2D := Time - min(Time), by = ID]
-# Removing the new Time 0
-T2D_peeps0 <- T2D_peeps0[Delta != 3]; T2D_peeps0.5 <- T2D_peeps0.5[Delta != 3]
-T2D_peeps1 <- T2D_peeps1[Delta != 3]
-```
-
-Proportion of treatment and placebo patients who have died before 1 year after T2D diagnose, when drug has no effect
-```{r}
-c(nrow(T2D_peeps0[Time_T2D < 1 & Delta == 1 & A0 == 1]) / length(unique(T2D_peeps0[A0 == 1]$ID)),
-nrow(T2D_peeps0[Time_T2D < 1 & Delta == 1 & A0 == 0]) / length(unique(T2D_peeps0[A0 == 0]$ID)))
-```
-
-Proportion of treatment and placebo patients who have died before 1 year after T2D diagnose, when drug has small effect
-```{r}
-c(nrow(T2D_peeps0.5[Time_T2D < 1 & Delta == 1 & A0 == 1]) / length(unique(T2D_peeps0.5[A0 == 1]$ID)),
-nrow(T2D_peeps0.5[Time_T2D < 1 & Delta == 1 & A0 == 0]) / length(unique(T2D_peeps0.5[A0 == 0]$ID)))
-```
-
-Proportion of treatment and placebo patients who have died before 1 year after T2D diagnose, when drug has large effect
-```{r}
-c(nrow(T2D_peeps1[Time_T2D < 1 & Delta == 1 & A0 == 1]) / length(unique(T2D_peeps1[A0 == 1]$ID)),
-nrow(T2D_peeps1[Time_T2D < 1 & Delta == 1 & A0 == 0]) / length(unique(T2D_peeps1[A0 == 0]$ID)))
-```
-
-The proportions are not the same. For the treatment group the proportion of dead is smaller. 
-
-### When there is an effect og drug on death
-
-We now simulate data where the effect of the drug on Death is -0.5. 
-
-```{r}
-data0 <- sim_data_setting2(N = 5 * 10^4, beta_L_D = 1, beta_A0_D = -0.5,
-                           beta_L0_L = 1, beta_A0_L = 0)
-data0.5 <- sim_data_setting2(N = 5 * 10^4, beta_L_D = 1, beta_A0_D = -0.5,
-                           beta_L0_L = 1, beta_A0_L = -0.5)
-data1 <- sim_data_setting2(N = 5 * 10^4, beta_L_D = 1, beta_A0_D = -0.5,
-                           beta_L0_L = 1, beta_A0_L = -1)
-```
-
-We find the average initial age, the average time of T2D diagnose and number of patients among respectively placebo and treatment T2D diagnosed patients.
-
-```{r}
-# T2D events
-T2D_events0 <- data0[Delta == 3]; T2D_events0.5 <- data0.5[Delta == 3]; T2D_events1 <- data1[Delta == 3]
-
-# Mean baseline covariate of T2D diagnose
-cbind(rbind(T2D_events0[, .(L0_mean = mean(L0)), by = A0],
-      T2D_events0.5[, .(L0_mean = mean(L0)), by = A0],
-      T2D_events1[, .(L0_mean = mean(L0)), by = A0]), "Effect of Drug on T2D" = c(0,0,-0.5,-0.5,-1,-1))
-```
-
-Both groups have a little bit larger than average baseline covariate.
-
-```{r}
-# Mean time of T2D diagnose
-cbind(rbind(T2D_events0[, .(Time_mean = mean(Time)), by = A0],
-      T2D_events0.5[, .(Time_mean = mean(Time)), by = A0],
-      T2D_events1[, .(Time_mean = mean(Time)), by = A0]) , "Effect of Drug on T2D" = c(0,0,-0.5,-0.5,-1,-1))
-```
-
-The larger the effect of the drug the later the patients in the Treatment group develop T2D.
-
-```{r}
-# Number of individuals with T2D diagnose
-cbind(rbind(T2D_events0[,  .N, by = A0],
-      T2D_events0.5[,  .N, by = A0],
-      T2D_events1[,  .N, by = A0]), "Effect of Drug on T2D" = c(0,0,-0.5,-0.5,-1,-1))
-```
-
-The number of patients developing T2D is equal for both groups when there is no effect of the drug. But fewer and fewer patients in the Treatment arm develop T2D as the effect of the drug increases due to censoring and death. 
-
-We now naively look into the proportion of placebo and treatment T2D diagnosed patients that die by some time $\tau$  
-
-```{r}
-T2D_peeps0 <- data0[ID %in% T2D_events0$ID]; T2D_peeps0.5 <- data0.5[ID %in% T2D_events0.5$ID]; 
-T2D_peeps1 <- data1[ID %in% T2D_events1$ID]
-
-# Setting T_0 to debut time of diabetes
-T2D_peeps0[, Time_T2D := Time - min(Time), by = ID]; T2D_peeps0.5[, Time_T2D := Time - min(Time), by = ID]
-T2D_peeps1[, Time_T2D := Time - min(Time), by = ID]
-# Removing the new Time 0
-T2D_peeps0 <- T2D_peeps0[Delta != 3]; T2D_peeps0.5 <- T2D_peeps0.5[Delta != 3]
-T2D_peeps1 <- T2D_peeps1[Delta != 3]
-```
-
-Proportion of treatment and placebo patients who have died before 1 year after T2D diagnose, when drug has no effect
-```{r}
-c(nrow(T2D_peeps0[Time_T2D < 1 & Delta == 1 & A0 == 1]) / length(unique(T2D_peeps0[A0 == 1]$ID)),
-nrow(T2D_peeps0[Time_T2D < 1 & Delta == 1 & A0 == 0]) / length(unique(T2D_peeps0[A0 == 0]$ID)))
-```
-
-Proportion of treatment and placebo patients who have died before 1 year after T2D diagnose, when drug has small effect
-```{r}
-c(nrow(T2D_peeps0.5[Time_T2D < 1 & Delta == 1 & A0 == 1]) / length(unique(T2D_peeps0.5[A0 == 1]$ID)),
-nrow(T2D_peeps0.5[Time_T2D < 1 & Delta == 1 & A0 == 0]) / length(unique(T2D_peeps0.5[A0 == 0]$ID)))
-```
-
-Proportion of treatment and placebo patients who have died before 1 year after T2D diagnose, when drug has large effect
-```{r}
-c(nrow(T2D_peeps1[Time_T2D < 1 & Delta == 1 & A0 == 1]) / length(unique(T2D_peeps1[A0 == 1]$ID)),
-nrow(T2D_peeps1[Time_T2D < 1 & Delta == 1 & A0 == 0]) / length(unique(T2D_peeps1[A0 == 0]$ID)))
-```
-
-The proportions are not the same for the placebo and treatment group. For the treatment group the proportion of dead is smaller. But the proportions are constant no matter the effect of the drug. 
-
-
-## Larger effect of time on intensity of death
-
-```{r, results='hide'}
-res5 <- compare_effects(estimator = estimator2, N = N, beta_L_D = seq(0,1,by = 0.1), nu = rep(1.3,4))
-res6 <- compare_effects(estimator = estimator2, N = N, beta_A0_D = seq(-1,0,by = 0.1), nu = rep(1.3,4))
-```
-
-
-```{r}
-plot_compare(res5, diff_betas= seq(0,1,by = 0.1))+
-      ylab("Estimated survival probability")+
-      xlab("Effect of T2D on Death")+
-      labs(title = "3 year survival probability since T2D")
-
-plot_compare(res6, diff_betas= seq(-1,0,by = 0.1))+
-      ylab("Estimated survival probability")+
-      xlab("Effect of Drug on Death")+
-      labs(title = "3 year survival probability since T2D")
-```
-
-Increasing the effect of time on the intensities does not change the results...
-
-## Helene forslag
+## Interventions
 
 *Generate large data*
 
 ```{r}
-N <- 5 * 10^4
 data_A <- sim_data_setting2(N = N, beta_L_D = 1, cens = 0, beta_A0_L = 1)
 data_A[, at_risk_cov := as.numeric(L == 0)]
 data_A_t <- trans_int_data(data_A)
@@ -383,15 +178,9 @@ treat_group <- data_A[A0 == 1]
 
 *Fit Weibull*
 
-I feel like there is something going wrong here
 ```{r}
 survfit <- survreg(Surv(Time, Delta == 3) ~ I(L0 / 50) + L1, 
                    data = no_treat_group[at_risk_cov == 1], 
-                   cluster = ID,
-                   dist='weibull')
-
-survfit1 <- survreg(Surv(Time, Delta == 3) ~ I(L0 / 50) + L1 + A0, 
-                   data = data_A[at_risk_cov == 1], 
                    cluster = ID,
                    dist='weibull')
 ```
@@ -399,19 +188,13 @@ survfit1 <- survreg(Surv(Time, Delta == 3) ~ I(L0 / 50) + L1 + A0,
 Estimates in no treatment group
 ```{r}
 nu_est <- 1/survfit$scale; nu_est
-eta_est <- 1/exp(survfit$coefficients[1]); eta_est
+eta_est <- 1/(exp(survfit$coefficients[1]))^nu_est; eta_est
 beta_l0_l_est <- - survfit$coefficients[2] / survfit$scale; beta_l0_l_est
 beta_l1_l_est <- - survfit$coefficients[3] / survfit$scale; beta_l1_l_est
-
-1/survfit1$scale
-1/exp(survfit1$coefficients[1])
-- survfit1$coefficients[2] / survfit1$scale
-- survfit1$coefficients[4] / survfit1$scale
 ```
 
 *Generate large data set under the intervened intensity *
 ```{r}
-N <- 5 * 10^4
 data_new <- sim_data_setting2(N = N, 
                               cens = 0,
                               eta = c(rep(0.1,3), eta_est),
@@ -425,10 +208,10 @@ data_new <- sim_data_setting2(N = N,
 data_new_no_int <- sim_data_setting2(N = N, cens = 0)
 ```
 
-*Proportion of subjects dying before some time $\tau$*
+*Proportion of subjects dying before some time $\tau$ in treatment group*
 ```{r}
 tau <- 2
-mean(data_new[Delta == 1, Time] < tau) # with intervention
-mean(data_new_no_int[Delta == 1, Time] < tau) # without intervention
+mean(data_new[Delta == 1 & A0 == 1, Time] < tau) # with intervention
+mean(data_new_no_int[Delta == 1 & A0 == 1, Time] < tau) # without intervention
 ```
-A little bit higher probability of death under interventions. 
+Basically the same...
