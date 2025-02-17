@@ -19,7 +19,6 @@ library(rtmle)
 library(ggplot2)
 library(microbenchmark)
 theme_set(theme_bw())
-source("~/Helene_projekt/funcs_for_two_settings.R")
 ```
 
 In the following we simulate healthcare data from a setting with 4 different types of events: Death, Censoring, Confounding Event (L) and Treatment (A). Death and Censoring are terminal events and each individual can experience the confounding Event and Treatment once. The purpose of the following is to investigate how failing to account for the confounder affects the analysis of the data. There are two baseline covariates $L0$ and $L1$ that affect the intensities of the different events. The distribution of the baseline covariate $L0$ is uniform on $(50,60)$ and can represent age. The covariate $L1$ takes values 0 and 1, and follows a binomial distribution with $p=0.5$, it can be interpreted as the sex of the individual. The intensities of the event $x \in \mathcal{X}$ follow the form
@@ -32,7 +31,6 @@ $$\phi(x,t) = \exp (\beta_{L_0 \to x} L_0  + \beta_{L \to x} L + \beta_{A \to x}
 
 # Interventions
 
-
 *1. Use simulation function to generate one data set of reasonable size $n$.*
 
 ```{r}
@@ -43,12 +41,12 @@ data0 <- sim_data_setting1(N = n, cens = 0)
 *2. On that data, estimate a marginal intensity/hazard of operation; perhaps use a Weibull regression?*
 
 ```{r}
-data0_t <- trans_int_data(data0)
-data0_t[, at_risk_oper := as.numeric(A == 0)]
+data0[, at_risk_oper := as.numeric(A == 0)]
 
-fit0 <- flexsurv::flexsurvreg(formula = Surv(Time, Delta == 2), 
-            data = data0_t[at_risk_oper == 1], 
-            dist = "weibull")
+fit0 <- survreg(Surv(Time, Delta == 2) ~ 1, 
+                   data = data0[at_risk_oper == 1], 
+                   cluster = ID,
+                   dist='weibull')
 ```
 
 *3. Use your simulation function to make a large data set under the intervened intensity*
@@ -56,27 +54,27 @@ fit0 <- flexsurv::flexsurvreg(formula = Surv(Time, Delta == 2),
 We first find the estimates from the fitted regression:
 
 ```{r}
-fit0$coefficients
-nu0 <- fit0$coefficients[1]
-eta0 <- 1/(fit0$coefficients[2]^nu0)
+nu0 <- 1/fit0$scale; nu0
+eta0 <- 1/(exp(fit0$coefficients[1]))^nu0; eta0
 ```
 
 We generate two large data sets under the intervened intensity. One of them without any operation events. 
 ```{r}
 N <- 10^4
-
-data_under_int <- sim_data_setting1(N = N, cens = 0,
+data_under_int <- sim_data_setting1(N = N, 
+                                    cens = 0,
+                                    beta_L0_A = 0,
+                                    beta_L_A = 0,
                                     eta = c(rep(0.1,3), eta0),
-                                    nu = c(rep(1.1,3), nu0),
-                                    beta_L0_A = fit0$coefficients[3],
-                                    beta_L_A = fit0$coefficients[4])
+                                    nu = c(rep(1.1,3), nu0))
 
 
-data_under_int_no_op <- sim_data_setting1(N = N, cens = 0, 
+data_under_int_no_op <- sim_data_setting1(N = N, 
+                                          cens = 0, 
+                                          beta_L0_A = 0,
+                                          beta_L_A = 0,
                                           op = 0, eta = c(rep(0.1,3), eta0),
-                                          nu = c(rep(1.1,3), nu0),
-                                          beta_L0_A = fit0$coefficients[3],
-                                          beta_L_A = fit0$coefficients[4])
+                                          nu = c(rep(1.1,3), nu0))
 ```
 
 *4. Compute the average of subjects dying before some time tau. Do the same in the setting where all operation events are removed.*
@@ -87,21 +85,6 @@ tau <- 5
 mean(data_under_int[Delta == 1, Time] < tau) # With operations
 mean(data_under_int_no_op[Delta == 1, Time] < tau) # No operation
 ```
-
-
-```{r}
-# We might have problems with time varying covariates - evt prøv det her
-#flexsurv::flexsurvreg(formula = Surv(tstart, tstop, Delta == 0) ~ L0 + L, 
-#                      data=set1_data_t,
-#                      dist = "weibull") 
-
-#set1_data_t <- trans_int_data(data0)
-
-#set1_data_t[, at_risk_oper := as.numeric(A == 0)]
-#set1_data_t[, at_risk_cov := as.numeric(L == 0)]
-
-#survfit_oper <- coxph(Surv(tstart, tstop, Delta == 0) ~ L0 + L, 
-#                      data = set1_data_t[at_risk_oper == 1], cluster = ID)
-```
+A larger percentage of subjects are dead before time $\tau$ when we do not perform operations. 
 
 

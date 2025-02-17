@@ -214,4 +214,4 @@ tau <- 2
 mean(data_new[Delta == 1 & A0 == 1, Time] < tau) # with intervention
 mean(data_new_no_int[Delta == 1 & A0 == 1, Time] < tau) # without intervention
 ```
-Basically the same...
+
