@@ -27,24 +27,26 @@ sim_event_data <- function(N,                      # Number of individuals
                            eta = rep(0.1,4),       # Shape parameters
                            nu = rep(1.1,4),        # Scale parameters
                            at_risk = NULL,         # Function defining the setting
-                           term_deltas = c(1,2)    # Terminal events
+                           term_deltas = c(0,1),    # Terminal events
+                           max_cens = Inf,
+                           sex = FALSE
                            )
   {
   ID <- NULL
   if(is.null(beta)){
     beta <- matrix(0, nrow = 4, ncol = 4)
   }
+  if(!sex){
+    beta <- rbind(beta, rep(0,4))
+  }
 
 
   if(is.null(at_risk)){
     at_risk <- function(i, L, A) {
       return(c(
-        # You are only at risk for an operation if you have not had an operation yet
-        as.numeric(A[i] == 0),
-        # If you have not died yet or been censored yet, you are at risk for dying or being censored
-        1,1,
-        # You are only at risk for a change in the covariate process if you have not had a change yet
-        as.numeric(L[i] == 0)))
+        1,1, # If you have not died or been censored yet, you are at risk for dying or being censored
+        as.numeric(A[i] == 0), # You are only at risk for an operation if you have not had an operation yet
+        as.numeric(L[i] == 0))) # You are only at risk for a change in the covariate process if you have not had a change yet
   }}
 
   # Events
@@ -52,33 +54,47 @@ sim_event_data <- function(N,                      # Number of individuals
 
   # Intensities
   phi <- function(i) {
-    exp(L0[i] * beta[1,] + A[i] * beta[2,] + A0[i] * beta[3,] + L[i] * beta[4,])
+    exp(L0[i] / 50 * beta[1,] + A0[i] * beta[2,] + L[i] * beta[3,] + A[i] * beta[4,] + L1[i] * beta[5,])
   }
 
   lambda <- function(t, i) {
     at_risk(i, L, A) * eta * nu * t ^ (nu - 1) * phi(i)
   }
 
-  # Summed cumulative hazard
-  sum_cum_haz <- function(u, t, i) {
-    sum(at_risk(i, L, A) * eta * phi(i) * ((t + u) ^ nu - t ^ nu))
-  }
+  # If all events have same parameter, the inverse simplifies
+  if(all(nu[1] == nu)){
+    inverse_sc_haz <- function(u, t, i) {
+      denom <- sum(at_risk(i, L, A) * eta * phi(i))
+      (u / denom + t^nu[1])^(1 / nu[1]) - t
+    }
+  } else{
+    # Summed cumulative hazard
+    sum_cum_haz <- function(u, t, i) {
+      sum(at_risk(i, L, A) * eta * phi(i) * ((t + u) ^ nu - t ^ nu))
+    }
 
-  # Inverse summed cumulative hazard function
-  inverse_sc_haz <- function(p, t, i, lower_bound = 10^-15, upper_bound = 100) {
-    root_function <- function(u) sum_cum_haz(u, t, i) - p
-    stats::uniroot(root_function, lower = lower_bound, upper = upper_bound)$root
+    # Inverse summed cumulative hazard function
+    inverse_sc_haz <- function(p, t, i, lower_bound = 10^-15, upper_bound = 200) {
+      root_function <- function(u) sum_cum_haz(u, t, i) - p
+      stats::uniroot(root_function, lower = lower_bound, upper = upper_bound)$root
+    }
   }
 
   # Event probabilities
   probs <- function(t, i){
-    probs <- lambda(t, i)
-    summ <- sum(probs)
-    probs / summ
+    if(t > max_cens){
+      probs <- c(1,0,0,0)
+    }
+    else{
+      probs <- lambda(t, i)
+      summ <- sum(probs)
+      probs / summ
+    }
   }
 
   # Draw
-  L0 <- stats::runif(N)
+  L0 <- stats::runif(N, 40, 60)
+  L1 <- stats::rbinom(N, 1, 0.5)
   A0 <- stats::rbinom(N, 1, 0.5)
 
   # Initialize
@@ -103,6 +119,7 @@ sim_event_data <- function(N,                      # Number of individuals
                Time = T_k[alive],
                Delta = Deltas,
                L0 = L0[alive],
+               L1 = L1[alive],
                L = L[alive],
                A0 = A0[alive],
                A = A[alive])
@@ -110,13 +127,16 @@ sim_event_data <- function(N,                      # Number of individuals
     res <- rbind(res, kth_event)
 
     # Update treatment process and covariate change indicators
-    A[alive][Deltas == 0] <- 1
+    A[alive][Deltas == 2] <- 1
     L[alive][Deltas == 3] <- 1
 
     # Who is still alive and uncensored?
     alive <- alive[! Deltas %in% term_deltas]
   }
+
   setkey(res, ID)
+  if(!sex) res[,L1:= NULL]
+
   return(res)
 }
 
@@ -128,7 +148,9 @@ my_bench <- bench::press(
   N = 2^(4:10),
   {
     bench::mark(
-      "sim_event_data" = sim_event_data(N = N)
+      "sim_event_data" = sim_event_data(N = N),
+      "sim_event_data old" = sim_event_data(N = N, nu = c(1.1,1.11,1.1,1.1)),
+      check = FALSE
     )
   }
 )
@@ -138,8 +160,6 @@ my_bench |>
   ggplot(aes(N, median, color = expr)) + geom_point() + 
   #scale_y_log10() +
   geom_line() + labs(y = "time (ms)")
-
-# Vokser lineært
 ```
 
 

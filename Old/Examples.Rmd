@@ -70,29 +70,31 @@ data_int[, at_risk_cov := as.numeric(L == 0)]
 
 
 # Fit models
-survfit_oper <- coxph(Surv(tstart, tstop, Delta == 0) ~ L0 + A0 + L, data = data_int[at_risk_oper == 1], cluster = ID)
-survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0 + A + A0 + L, data = data_int, cluster = ID)
-survfit_cens <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A + A0 + L, data = data_int, cluster = ID)
-survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0 + A + A0, data = data_int[at_risk_cov == 1], cluster = ID)
-confint(survfit_oper); c(beta[1,1], beta[3,1], beta[4,1])
+survfit_oper <- coxph(Surv(tstart, tstop, Delta == 2) ~ I(L0/50) + A0 + L, data = data_int[at_risk_oper == 1], cluster = ID)
+survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ I(L0/50) + A0 + L + A, data = data_int, cluster = ID)
+survfit_cens <- coxph(Surv(tstart, tstop, Delta == 0) ~ I(L0/50) + A0 + L + A, data = data_int, cluster = ID)
+survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ I(L0/50) + A0 + A, data = data_int[at_risk_cov == 1], cluster = ID)
+confint(survfit_oper); beta[1:3,3]
 confint(survfit_death); beta[,2]
-confint(survfit_cens); beta[,3]
-confint(survfit_cov); beta[1:3,4]
+confint(survfit_cens); beta[,1]
+confint(survfit_cov); beta[c(1,2,4),4]
 
 # Visualizing the confidence intervals
 
-CIs <- cbind("Par" = c("oper_L0", "oper_A", "oper_A0", "death_L0", "death_A", "death_A0", "death_L",
-                       "cens_L0", "cens_A", "cens_A0", "cens_L","cov_L0", "cov_A", "cov_A0" ),
-           rbind(confint(survfit_oper), confint(survfit_death), confint(survfit_cens),confint(survfit_cov)))
+CIs <- cbind("Par" = c("cens_L0", "cens_A", "cens_A0", "cens_L",
+                       "death_L0", "death_A", "death_A0", "death_L",
+                       "oper_L0", "oper_L", "oper_A0",
+                       "cov_L0", "cov_A", "cov_A0" ),
+           rbind(confint(survfit_cens), confint(survfit_death), confint(survfit_oper),confint(survfit_cov)))
 
 rownames(CIs) <- NULL
 colnames(CIs) <- c("Par", "Lower", "Upper")
 CIs <- data.table(CIs)
 
-CIs[, True_val := c(beta[1,1], beta[3,1], beta[4,1],
-               beta[,2],
-               beta[,3],
-               beta[1:3,4])]
+CIs[, True_val := c(beta[,1],
+                    beta[,2],
+                    beta[1:3,3],
+               beta[c(1,2,4),4])]
 
 CIs$Lower <- as.numeric(CIs$Lower)
 CIs$Upper <- as.numeric(CIs$Upper)
@@ -121,12 +123,12 @@ Model fit
 beta <- matrix(rnorm(4,0,1), ncol = 2, nrow = 2)
 data <- sim_surv_data(N = 6000, beta = beta)
 
-survfit_death <- coxph(Surv(Time, Delta == 1) ~ L0 + A0, data = data)
-coefficients(survfit_death); beta[,1]
+survfit_death <- coxph(Surv(Time, Delta == 1) ~ I(L0/50) + A0, data = data)
+coefficients(survfit_death); beta[,2]
 confint(survfit_death)
 
-survfit_cens <- coxph(Surv(Time, Delta == 2) ~ L0 + A0, data = data)
-coefficients(survfit_cens); beta[,2]
+survfit_cens <- coxph(Surv(Time, Delta == 0) ~ I(L0/50) + A0, data = data)
+coefficients(survfit_cens); beta[,1]
 confint(survfit_cens)
 ```
 
@@ -145,15 +147,15 @@ Model fit
 beta <- matrix(rnorm(6,0,1), ncol = 3, nrow = 2)
 data <- sim_cr_data(N = 10000, beta = beta)
 
-survfit_proc1 <- coxph(Surv(Time, Delta == 0) ~ L0 + A0, data = data)
+survfit_proc1 <- coxph(Surv(Time, Delta == 0) ~ I(L0/50) + A0, data = data)
 coefficients(survfit_proc1); beta[,1]
 confint(survfit_proc1)
 
-survfit_proc2 <- coxph(Surv(Time, Delta == 1) ~ L0 + A0, data = data)
+survfit_proc2 <- coxph(Surv(Time, Delta == 1) ~ I(L0/50) + A0, data = data)
 coefficients(survfit_proc2); beta[,2]
 confint(survfit_proc2)
 
-survfit_cens <- coxph(Surv(Time, Delta == 2) ~ L0 + A0, data = data)
+survfit_cens <- coxph(Surv(Time, Delta == 2) ~ I(L0/50) + A0, data = data)
 coefficients(survfit_cens); beta[,3]
 confint(survfit_cens)
 ```
