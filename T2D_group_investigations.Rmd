@@ -247,25 +247,21 @@ We let the effect of $L0$ on death vary, and estimate the survival probability w
 N <- 8000
 
 estimator2 <- function(data, N) {
-    # Finding all the T2D people 
-    T2D_events <- data[Delta == 3]
-    T2D_peeps <- data[ID %in% T2D_events$ID]
-    
-    # Setting T_0 to debut time of diabetes
-    T2D_peeps[, Time_T2D := Time - min(Time), by = ID]
-    
-    # Removing the new Time 0
-    T2D_peeps <- T2D_peeps[Delta != 3]
-    
-    # Creating a status variable
-    T2D_peeps[, Status := Delta == 1]
-    
-    # Kaplan meyer fit
-    fit <- prodlim(Hist(Time_T2D, Status) ~ A0, data = T2D_peeps)
-    
-    # Save estimate of survival probability
-    preds <- predict(fit, times = 2, newdata = data.frame(A0 = c(0,1)))
-    return(c(preds$`A0=0`, preds$`A0=1`))
+  # T2D events
+  T2D_events <- data[Delta == 3]
+  # T2D people
+  T2D_peeps <- data[ID %in% T2D_events$ID]
+ 
+  # Setting T_0 to debut time of diabetes
+  T2D_peeps[, Time_T2D := Time - min(Time), by = ID]
+  # Removing the new Time 0
+  T2D_peeps <- T2D_peeps[Delta != 3]
+  
+  # Proportion of treatment and placebo patients who have died before 1 year after T2D diagnose
+  prop_treat <- nrow(T2D_peeps[Time_T2D < 1 & Delta == 1 & A0 == 1]) / length(unique(T2D_peeps[A0 == 1]$ID))
+  prop_plac <- nrow(T2D_peeps[Time_T2D < 1 & Delta == 1 & A0 == 0]) / length(unique(T2D_peeps[A0 == 0]$ID))
+  
+    return(c(prop_plac, prop_treat))
 }
 
 res5 <- compare_effects(estimator = estimator2, N = N, beta_L_D = 0.5, 
