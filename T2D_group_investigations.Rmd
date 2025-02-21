@@ -73,13 +73,13 @@ my_hist <- function(data0, data0.5, data1) {
   
   my_hist <- gridExtra::grid.arrange(
   ggplot(T2D_events0)+
-    geom_histogram(aes(x = L0), bins = 15)+
+    geom_histogram(aes(x = L0, y =..density..), bins = 15)+
     facet_grid(~A0),
   ggplot(T2D_events0.5)+
-    geom_histogram(aes(x = L0), bins = 15)+
+    geom_histogram(aes(x = L0, y =..density..), bins = 15)+
     facet_grid(~A0),
   ggplot(T2D_events1)+
-    geom_histogram(aes(x = L0), bins = 15)+
+    geom_histogram(aes(x = L0, y =..density..), bins = 15)+
     facet_grid(~A0),
   nrow = 2
 )
@@ -89,7 +89,7 @@ my_hist <- function(data0, data0.5, data1) {
 ```
 
 
-### Scenario A: No effect of drug on death, L0 has no effect on neither T2D nor on Death.
+## Scenario A: No effect of drug on death, L0 has no effect on neither T2D nor on Death.
 
 ```{r}
 N <- 4*10^4
@@ -106,7 +106,7 @@ data1_a <- sim_data_setting2(N = N, beta_L_D = 1, beta_A0_D = 0,
 
 First we look at the distribution of the covariate $L_0$:
 
-```{r}
+```{r, echo=FALSE,results='hide',fig.keep='all'}
 my_hist(data0_a, data0.5_a, data1_a)
 ```
 Looks pretty evenly distributed. 
@@ -119,7 +119,7 @@ my_summary(data1_a) |> kable()
 The L0 mean is roughly 50, the larger the effect of the drug, the later the T2D diagnose. The number of T2D diagnosed patients is smaller when the effect of there is an effect of the drug. The proportion of T2D patients dead two years after T2D diagnose is increasing slightly as the effect of the drug increases (in the placebo group a constant proportion ≈ 0.29 are dead). 
 
 
-### Scenario B: No effect of drug on death, L0 has no effect on T2D but an (very large) effect on Death.
+## Scenario B: No effect of drug on death, L0 has no effect on T2D but an (very large) effect on Death.
 
 ```{r}
 data0_b <- sim_data_setting2(N = N, beta_L_D = 1, beta_A0_D = 0,
@@ -135,7 +135,7 @@ data1_b <- sim_data_setting2(N = N, beta_L_D = 1, beta_A0_D = 0,
 
 First we look at the distribution of the covariate $L_0$:
 
-```{r}
+```{r, echo=FALSE,results='hide',fig.keep='all'}
 my_hist(data0_b, data0.5_b, data1_b)
 ```
 Now the distribution is uneven, with the T2D patients having a smaller $L0$. This might be due to the people with high L0 values being dead. But the effect is the same for placebo and treatment patients. 
@@ -149,7 +149,7 @@ my_summary(data1_b) |> kable()
 The mean of $L0$ is below 50, but not by much. The T2D time is again larger for the treatment group. The number of T2D events is decreasing for the T2D group as before. Prop dead 2 years after T2D is roughly the same in the two groups. 
 
 
-### Scenario C: No effect of drug on death, L0 has an effect on T2D and also an effect on Death (of equal size).
+## Scenario C: No effect of drug on death, L0 has an effect on T2D and also an effect on Death (of equal size).
 
 ```{r}
 data0_c <- sim_data_setting2(N = N, beta_L_D = 1, beta_A0_D = 0,
@@ -165,7 +165,7 @@ data1_c <- sim_data_setting2(N = N, beta_L_D = 1, beta_A0_D = 0,
 
 First we look at the distribution of the covariate $L_0$:
 
-```{r}
+```{r, echo=FALSE,results='hide',fig.keep='all'}
 my_hist(data0_c, data0.5_c, data1_c)
 ```
 Now the distribution seems to be even. The two effects are cancelling!
@@ -177,35 +177,63 @@ my_summary(data1_c) |> kable()
 ```
 The same results as we found in scenario A. 
 
-### Scenario D: Small effect of drug on Death (-0.3), L0 has a medium effect on T2D (0.7) and and a large effect on Death (1.5).
+## Scenario D: Small effect of drug on Death (-0.3), L0 has a medium effect on T2D (0.7) and and a large effect on Death (1.5).
 
 ```{r}
-data0_c <- sim_data_setting2(N = N, beta_L_D = 1, beta_A0_D = -0.3,
+data0_d <- sim_data_setting2(N = N, beta_L_D = 1, beta_A0_D = -0.3,
                            beta_L0_L = 0.7, beta_A0_L = 0,
                            cens = 0, beta_L0_D = 1.5)
-data0.5_c <- sim_data_setting2(N = N, beta_L_D = 1, beta_A0_D = -0.3,
+data0.5_d <- sim_data_setting2(N = N, beta_L_D = 1, beta_A0_D = -0.3,
                            beta_L0_L = 0.7, beta_A0_L = -0.5,
                            cens = 0, beta_L0_D = 1.5)
-data1_c <- sim_data_setting2(N = N, beta_L_D = 1, beta_A0_D = -0.3,
+data1_d <- sim_data_setting2(N = N, beta_L_D = 1, beta_A0_D = -0.3,
                            beta_L0_L = 0.7, beta_A0_L = -1, beta_L0_D = 1.5,
                            cens = 0)
 ```
 
 First we look at the distribution of the covariate $L_0$:
 
-```{r}
-my_hist(data0_c, data0.5_c, data1_c)
+```{r, echo=FALSE,results='hide',fig.keep='all'}
+my_hist(data0_d, data0.5_d, data1_d)
 ```
 Since the effects are not symmetric, we see again find an uneven distribution, allbeit a less extreme one then the one from scenario B. 
 
 ```{r}
-my_summary(data0_c) |> kable()
-my_summary(data0.5_c) |> kable()
-my_summary(data1_c) |> kable()
+my_summary(data0_d) |> kable()
+my_summary(data0.5_d) |> kable()
+my_summary(data1_d) |> kable()
 ```
 Pretty much the same results as in B. But this time with the proportion of dead after T2D diagnose smaller for the treatment group. But with the proportion of dead incresing as the effect of the drug increases. This must be due to the later T2D diagnose (?). 
 
-## Larger effect of time on intensity of death
+## Scenarie E: L0 har en effekt KUN på T2D, No effect of drug on death, Effect of drug on T2D: 0, -0.5, -1.
+
+```{r}
+data0_e <- sim_data_setting2(N = N, beta_L_D = 1, beta_A0_D = 0,
+                           beta_L0_L = 1.5, beta_A0_L = 0,
+                           cens = 0, beta_L0_D = 0)
+data0.5_e <- sim_data_setting2(N = N, beta_L_D = 1, beta_A0_D = 0,
+                           beta_L0_L = 1.5, beta_A0_L = -0.5,
+                           cens = 0, beta_L0_D = 0)
+data1_e <- sim_data_setting2(N = N, beta_L_D = 1, beta_A0_D = 0,
+                           beta_L0_L = 1.5, beta_A0_L = -1, beta_L0_D = 0,
+                           cens = 0)
+```
+
+First we look at the distribution of the covariate $L_0$:
+
+```{r, echo = FALSE, results = 'hide', fig.keep = 'all', message = FALSE}
+my_hist(data0_e, data0.5_e, data1_e)
+```
+The distribution looks a bit uneven, but it is hard to tell. And hard to see the differences between the scenarios. 
+
+```{r}
+my_summary(data0_e) |> kable()
+my_summary(data0.5_e) |> kable()
+my_summary(data1_e) |> kable()
+```
+The L0 mean appears to be increasing for both groups, with the Treatment group having a larger L0 mean consistently. Albeit very close to 50 for all. For Treatment patients the Time of T2D increases substantially and the number of T2D patients decreases as the effect of the drug increases. The proportion of dead in the treatment group increases slightly as the effect of the drug increases.  
+
+# Larger effect of time on intensity of death
 
 We now investigate how the estimates change if we increase the time effect on the intensity. Remember that we used the Weibull hazard as the baseline hazard:
 $$\alpha(t) = \eta \nu t^{nu-1}$$
