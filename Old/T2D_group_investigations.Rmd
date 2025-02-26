@@ -239,12 +239,12 @@ my_summary(data1_e) |> kable()
 The L0 mean appears to be increasing for the Treatment group. For Treatment patients the Time of T2D increases substantially and the number of T2D patients decreases as the effect of the drug increases. The proportion of dead in the treatment group increases as the effect of the drug increases.  
 
 
-# Kaplan-Meier estimates of survival for scenario E
+# Proportion dead
 
-We let the effect of $L0$ on death vary, and estimate the survival probability with KM. 
+We consider three different scenarios: where the effect of the drug on Death is $0$, $-0.1$ and $-0.2$. The effect of $A_0$ on T2D is let to vary from $-2.5$ to $0$. The effect of $L_0$ on T2D is large ($=2$). And the effect of T2D on death is moderate ($=1$). There is no effect of $L_0$ directly on death. 
 
 ```{r, results='hide'}
-N <- 8000
+N <- 2*10^4
 
 estimator2 <- function(data, N) {
   # T2D events
@@ -264,17 +264,20 @@ estimator2 <- function(data, N) {
     return(c(prop_plac, prop_treat))
 }
 
-res5 <- compare_effects(estimator = estimator2, N = N, beta_L_D = 0.5, 
-                        eta = c(0.1,0.3,0.1,0.1), nu = c(1.1,1.3,1.1,1.1),
-                        beta_L0_L = 2, beta_L0_D = seq(0,1,by = 0.1), beta_A0_D = 0)
+res5 <- compare_effects2(estimator = estimator2, N = N, eta = c(0.1,0.3,0.1,0.1), 
+                         nu = c(1.1,1.3,1.1,1.1),
+                         beta_L0_L = 2, beta_A0_L = seq(-2.5, 0, by = 0.15), 
+                         beta_L_D = 1, beta_L0_D = 0)
 ```
 
+Below the plots show the proportion dead for different effects of the drug on death. 
 
 ```{r}
-plot_compare(res5, diff_betas= seq(0,1,by = 0.1))+
-      ylab("Estimated survival probability")+
-      xlab("Effect of L0 on Death")+
-      labs(title = "2 year survival probability since T2D")
+pp <- plot_compare(res5, plot_no = 2, diff_betas = seq(-2.5, 0, by = 0.15))+
+  ylab("Proportion dead")+
+  xlab("Effect of A0 on T2D")+
+  labs(title = "Proportion Dead 2 year after T2D")
+pp
+ggsave(pp, filename = "prop_dead.jpeg",device = "jpeg",height = 6, width = 5, units = "in")
 ```
 
-There is a slight difference between the curves. 
