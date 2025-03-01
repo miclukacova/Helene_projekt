@@ -21,65 +21,21 @@ summary_sim_event <- function(data) {
 fit_mod_set1 <- function(data, timefix = FALSE){
   trans_data <- trans_int_data(data)
 
-  trans_data[, at_risk_oper := as.numeric(A == 0)]
-  trans_data[, at_risk_cov := as.numeric(L == 0)]
+  results <- matrix(nrow = 1, ncol = 2)
+  colnames(results) <- c("Fully Specified", "-L")
+  rownames(results) <- c("A")
 
-  results <- matrix(nrow = 10, ncol = 3)
-  colnames(results) <- c("Fully Specified", "-A", "-L")
-  rownames(results) <- c("L0", "L", "L0", "A", "L", "L0", "A", "L", "L0", "A")
+  # True model:
+  survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ I(L0/50) + A + L,
+                         data = trans_data, timefix = timefix)
+  results[,1] <- c(survfit_death$coefficients[2])
 
-  # True models:
-  survfit_oper <- coxph(Surv(tstart, tstop, Delta == 0) ~ L0 + L,
-                        data = trans_data[at_risk_oper == 1], cluster = ID,
-                        timefix = timefix)
-  survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0 + A + L,
-                         data = trans_data, cluster = ID,
-                         timefix = timefix)
-  survfit_cens <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A + L,
-                        data = trans_data, cluster = ID,
-                        timefix = timefix)
-  survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0 + A,
-                       data = trans_data[at_risk_cov == 1], cluster = ID,
-                       timefix = timefix)
+  # Cox model only with operation:
+  
+  survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ I(L0/50) + A,
+                         data = trans_data, timefix = timefix)
 
-  results[,1] <- c(survfit_oper$coefficients, survfit_death$coefficients,
-                   survfit_cens$coefficients, survfit_cov$coefficients)
-
-  # Cox models only with time varying covariate:
-
-  survfit_oper <- coxph(Surv(tstart, tstop, Delta == 0) ~ L0 + L,
-                        data = trans_data[at_risk_oper == 1], cluster = ID,
-                        timefix = timefix)
-  survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0 + L,
-                         data = trans_data, cluster = ID,
-                         timefix = timefix)
-  survfit_cens <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + L,
-                        data = trans_data, cluster = ID,
-                        timefix = timefix)
-  survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0,
-                       data = trans_data[at_risk_cov == 1], cluster = ID,
-                       timefix = timefix)
-
-  results[,2] <- c(survfit_oper$coefficients, survfit_death$coefficients[1], NA,
-                   survfit_death$coefficients[2], survfit_cens$coefficients[1], NA,
-                   survfit_cens$coefficients[2], survfit_cov$coefficients, NA)
-
-  # Cox models only with operation:
-  survfit_oper <- coxph(Surv(tstart, tstop, Delta == 0) ~ L0,
-                        data = trans_data[at_risk_oper == 1], cluster = ID,
-                        timefix = timefix)
-  survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0 + A,
-                         data = trans_data, cluster = ID,
-                         timefix = timefix)
-  survfit_cens <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A,
-                        data = trans_data, cluster = ID,
-                        timefix = timefix)
-  survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0 + A,
-                       data = trans_data[at_risk_cov == 1], cluster = ID,
-                       timefix = timefix)
-
-  results[,3] <- c(survfit_oper$coefficients, NA, survfit_death$coefficients, NA,
-                   survfit_cens$coefficients, NA, survfit_cov$coefficients)
+  results[,2] <- c(survfit_death$coefficients[2])
 
   return(results)
 
@@ -88,53 +44,44 @@ fit_mod_set1 <- function(data, timefix = FALSE){
 
 # Bootstrap for estimating model misspecification effect
 
-sys_invest <- function(eff_L_A = 1, eff_L_D = 1, eff_A_D = -1, B = 200, N = 400, 
+sys_invest <- function(eff_L_A = 1, eff_L_D = 1, eff_A_D = -1, B = 200, N = 500, 
                        timefix = FALSE) {
 
   # create results table
-  mod_est <- matrix(nrow = 10*B, ncol = 3)
+  mod_est <- matrix(nrow = B, ncol = 2)
 
   # run simulations
   for(i in 1:B){
     #browser()
     sim <- sim_data_setting1(N = N, beta_L_A = eff_L_A, beta_L_D = eff_L_D, beta_A_D = eff_A_D)
-    mod_est[(i*10 - 9):(i*10),] <- fit_mod_set1(sim, timefix = timefix)
+    mod_est[i,] <- fit_mod_set1(sim, timefix = timefix)
   }
 
   # create plots
   plotdata <- data.table(mod_est)
-  names(plotdata) <- c("Fully Specified", "-A", "-L")
+  names(plotdata) <- c("Fully Specified", "-L")
 
-  plotdata[, "Est" := rep(c("Op L0", "Op L", "Death L0", "Death A", "Death L",
-                            "Cens L0", "Cens A", "Cens L", "Cov L0", "Cov A"), B)]
+  plotdata[, "True" := rep(eff_A_D, B)]
 
-  plotdata[, "True" := rep(c(1, eff_L_A, 1, eff_A_D, eff_L_D, 0, 0, 0, 1, -0.5), B)]
+  b1 <- plotdata[,.("Bias True" = mean(`Fully Specified` - True))]
+  b2 <- plotdata[,.("Bias -L" = mean(`-L`- True))]
+  
+  mean1 <- plotdata[,.("Mean est True" = mean(`Fully Specified`))]
+  mean2 <- plotdata[,.("Mean est -L" = mean(`-L`))]
 
-  b1 <- plotdata[,.("Bias True" = mean(`Fully Specified` - True)), by = Est]
-  b2 <- plotdata[,.("Bias -A" = mean(`-A` - True)), by = Est]
-  b3 <- plotdata[,.("Bias -L" = mean(`-L`- True)), by = Est]
-
-  bias <- cbind(b1, b2[,2], b3[,2])
+  stats <- cbind(b1, b2, mean1, mean2)
 
   pp1 <- ggplot(data = plotdata)+
     geom_histogram(aes(x = `Fully Specified`, y = ..density..), binwidth = 0.1,
                    fill = "blue", alpha = 0.5, col = "white")+
-    facet_wrap(~Est, scales = "free") +
     geom_vline(aes(xintercept = True), color = "red", linetype = 2)
 
   pp2 <- ggplot(data = plotdata)+
-    geom_histogram(aes(x = `-A`, y = ..density..), binwidth = 0.1,
-                   fill = "blue", alpha = 0.5, col = "white")+
-    facet_wrap(~Est, scales = "free") +
-    geom_vline(aes(xintercept = True), color = "red", linetype = 2)
-
-  pp3 <- ggplot(data = plotdata)+
     geom_histogram(aes(x = `-L`, y = ..density..), binwidth = 0.1,
                    fill = "blue", alpha = 0.5, col = "white")+
-    facet_wrap(~Est, scales = "free") +
     geom_vline(aes(xintercept = True), color = "red", linetype = 2)
 
-  return(list(Bias = bias, pp1 = pp1, pp2 = pp2, pp3 = pp3, data = plotdata))
+  return(list(Stats = stats, pp1 = pp1, pp2 = pp2, data = plotdata))
 
 }
 

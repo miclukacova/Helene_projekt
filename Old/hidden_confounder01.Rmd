@@ -19,7 +19,7 @@ library(rtmle)
 library(ggplot2)
 library(microbenchmark)
 theme_set(theme_bw())
-source("~/Helene_projekt/funcs_for_two_settings.R")
+source("funcs_for_two_settings.R")
 ```
 
 # Simulation function
@@ -47,13 +47,13 @@ set1_data_t <- trans_int_data(set1_data)
 set1_data_t[, at_risk_oper := as.numeric(A == 0)]
 set1_data_t[, at_risk_cov := as.numeric(L == 0)]
 
-survfit_oper <- coxph(Surv(tstart, tstop, Delta == 0) ~ L0 + L, 
+survfit_oper <- coxph(Surv(tstart, tstop, Delta == 2) ~ I(L0/50) + L, 
                       data = set1_data_t[at_risk_oper == 1], cluster = ID)
-survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0 + A + L, 
+survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ I(L0/50) + A + L, 
                       data = set1_data_t, cluster = ID)
-survfit_cens <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A + L, 
+survfit_cens <- coxph(Surv(tstart, tstop, Delta == 0) ~ I(L0/50) + A + L, 
                       data = set1_data_t, cluster = ID)
-survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0 + A, 
+survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ I(L0/50) + A, 
                     data = set1_data_t[at_risk_cov == 1], cluster = ID)
 
 survfit_oper$coefficients 
@@ -62,8 +62,6 @@ survfit_cens$coefficients
 survfit_cov$coefficients
 ```
 
-Den estimere ikke rigtigt når vi har censorering...
-
 ```{r}
 set1_data_t <- trans_int_data(set1_data_fu)
 set1_data_t[, C := !is.na(Delta)]
@@ -71,13 +69,13 @@ set1_data_t[, C := !is.na(Delta)]
 set1_data_t[, at_risk_oper := as.numeric(A == 0)]
 set1_data_t[, at_risk_cov := as.numeric(L == 0)]
 
-survfit_oper <- coxph(Surv(tstart, tstop, Delta == 0) ~ L0 + L, 
+survfit_oper <- coxph(Surv(tstart, tstop, Delta == 2) ~ I(L0/50) + L, 
                       data = set1_data_t[at_risk_oper == 1], cluster = ID)
-survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0 + A + L, 
+survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ I(L0/50) + A + L, 
                       data = set1_data_t, cluster = ID)
-survfit_cens <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A + L, 
+survfit_cens <- coxph(Surv(tstart, tstop, Delta == 0) ~ I(L0/50) + A + L, 
                       data = set1_data_t, cluster = ID)
-survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0 + A, 
+survfit_cov <- coxph(Surv(tstart, tstop, Delta == 3) ~ I(L0/50) + A, 
                     data = set1_data_t[at_risk_cov == 1], cluster = ID)
 
 survfit_oper$coefficients 
@@ -144,7 +142,7 @@ Analysing error in modelsspecifications with repeated simulations.
 ```{r}
 # TODO: inkorporer followup i den her
 set.seed(9457)
-try1 <- sys_invest(N = 400, eff_A_D = -1, timefix = TRUE)
+try1 <- sys_invest(N = 400, eff_A_D = -1, timefix = FALSE)
 try2 <- sys_invest(N = 400, eff_L_A = 2, eff_L_D = 2, eff_A_D = -1, timefix = FALSE)
 try3 <- sys_invest(N = 400, eff_L_A = 3, eff_L_D = 3, eff_A_D = -1, timefix = FALSE) # This runs only with the timefix = FALSE
 ```
