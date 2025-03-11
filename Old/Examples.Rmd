@@ -73,6 +73,8 @@ data_int <- trans_int_data(data)
 data_int[, at_risk_2 := as.numeric(A == 0)]
 data_int[, at_risk_3 := as.numeric(L == 0)]
 
+print(xtable::xtable(head(data_int)))
+
 
 # Fit models
 survfit_oper <- coxph(Surv(tstart, tstop, Delta == 2) ~ I(L0/50) + A0 + L, data = data_int[at_risk_2 == 1])

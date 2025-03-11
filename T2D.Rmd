@@ -21,6 +21,7 @@ library(rtmle)
 library(ggplot2)
 library(prodlim)
 theme_set(theme_bw())
+source("~/Projekt Event History/int_effect_func.R")
 ```
 
 # Inverstigation of T2D trial 
@@ -154,64 +155,7 @@ When the drug has an effect on Death, the survival probability after T2D diagnos
 
 ## Interventions
 
-*Generate large data*
-
 ```{r}
-data_A <- sim_data_setting2(N = N, beta_L_D = 1, cens = 0, beta_A0_L = 1)
-data_A[, at_risk_cov := as.numeric(L == 0)]
-data_A_t <- trans_int_data(data_A)
-
-survfit <- coxph(Surv(tstart, tstop, Delta == 3) ~ I(L0 / 50) + L1 + A0,
-                      data = data_A_t[at_risk_cov == 1],
-                      timefix = FALSE,
-                      cluster = ID)
-
-survfit$coefficients
+int_effect(N = N, N2 = N, beta_A0_D = 0, beta_L0_L = 0, beta_A0_L = 1, beta_L_D = 1, beta_L0_D = 2, 
+           nu = rep(1.1, 4), eta = rep(0.1, 4), 2) 
 ```
-
-*Grouping data based on treatment*
-
-```{r}
-no_treat_group <- data_A[A0 == 0]
-treat_group <- data_A[A0 == 1]
-```
-
-*Fit Weibull*
-
-```{r}
-survfit <- survreg(Surv(Time, Delta == 3) ~ I(L0 / 50) + L1, 
-                   data = no_treat_group[at_risk_cov == 1], 
-                   cluster = ID,
-                   dist='weibull')
-```
-
-Estimates in no treatment group
-```{r}
-nu_est <- 1/survfit$scale; nu_est
-eta_est <- 1/(exp(survfit$coefficients[1]))^nu_est; eta_est
-beta_l0_l_est <- - survfit$coefficients[2] / survfit$scale; beta_l0_l_est
-beta_l1_l_est <- - survfit$coefficients[3] / survfit$scale; beta_l1_l_est
-```
-
-*Generate large data set under the intervened intensity *
-```{r}
-data_new <- sim_data_setting2(N = N, 
-                              cens = 0,
-                              eta = c(rep(0.1,3), eta_est),
-                              nu = c(rep(1.1,3), nu_est),
-                              beta_L0_L = beta_l0_l_est,
-                              beta_A0_L = 0)
-```
-
-*Generate large data set without intervened intensity *
-```{r}
-data_new_no_int <- sim_data_setting2(N = N, cens = 0)
-```
-
-*Proportion of subjects dying before some time $\tau$ in treatment group*
-```{r}
-tau <- 2
-mean(data_new[Delta == 1 & A0 == 1, Time] < tau) # with intervention
-mean(data_new_no_int[Delta == 1 & A0 == 1, Time] < tau) # without intervention
-```
-
