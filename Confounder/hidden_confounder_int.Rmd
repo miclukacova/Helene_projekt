@@ -1,0 +1,90 @@
+---
+title: 'Hidden Confounder'
+output: html_document
+date: "2024-10-18"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, include=FALSE}
+# Libraries
+library(data.table)
+library(survival)
+#install.packages("rtmle")
+#devtools::install_github("tagteam/rtmle")
+library(rtmle)
+library(ggplot2)
+library(microbenchmark)
+theme_set(theme_bw())
+```
+
+In the following we simulate healthcare data from a setting with 4 different types of events: Death, Censoring, Confounding Event (L) and Treatment (A). Death and Censoring are terminal events and each individual can experience the confounding Event and Treatment once. The purpose of the following is to investigate how failing to account for the confounder affects the analysis of the data. There are two baseline covariates $L0$ and $L1$ that affect the intensities of the different events. The distribution of the baseline covariate $L0$ is uniform on $(50,60)$ and can represent age. The covariate $L1$ takes values 0 and 1, and follows a binomial distribution with $p=0.5$, it can be interpreted as the sex of the individual. The intensities of the event $x \in \mathcal{X}$ follow the form
+
+$$\lambda_{x}(t) =  R^x(t) \lambda_{0}(x,t)\phi(x,t)$$
+The function $R^x(t)$ is an at risk indicator. The baseline hazard is specified as
+$$\lambda_{0}(x,t)=\eta_x \nu_x t^{\nu_x-1} $$
+And
+$$\phi(x,t) = \exp (\beta_{L_0 \to x} L_0  + \beta_{L \to x} L + \beta_{A \to x} A + \beta_{L_1 \to x} L_1)$$
+
+# Interventions
+
+*1. Use simulation function to generate one data set of reasonable size $n$.*
+
+```{r}
+n <- 10^4
+data0 <- sim_data_setting1(N = n, cens = 0)
+```
+
+*2. On that data, estimate a marginal intensity/hazard of operation; perhaps use a Weibull regression?*
+
+```{r}
+data0[, at_risk_oper := as.numeric(A == 0)]
+
+fit0 <- survreg(Surv(Time, Delta == 2) ~ 1, 
+                   data = data0[at_risk_oper == 1], 
+                   cluster = ID,
+                   dist='weibull')
+```
+
+*3. Use your simulation function to make a large data set under the intervened intensity*
+
+We first find the estimates from the fitted regression:
+
+```{r}
+nu0 <- 1/fit0$scale; nu0
+eta0 <- 1/(exp(fit0$coefficients[1]))^nu0; eta0
+```
+
+We generate two large data sets under the intervened intensity. One of them without any operation events. 
+```{r}
+N <- 10^4
+data_under_int <- sim_data_setting1(N = N, 
+                                    cens = 0,
+                                    beta_L0_A = 0,
+                                    beta_L_A = 0,
+                                    eta = c(rep(0.1,3), eta0),
+                                    nu = c(rep(1.1,3), nu0))
+
+
+data_under_int_no_op <- sim_data_setting1(N = N, 
+                                          cens = 0, 
+                                          beta_L0_A = 0,
+                                          beta_L_A = 0,
+                                          op = 0, eta = c(rep(0.1,3), eta0),
+                                          nu = c(rep(1.1,3), nu0))
+```
+
+*4. Compute the average of subjects dying before some time tau. Do the same in the setting where all operation events are removed.*
+
+We compute the average of subjects dying before some time $\tau$.  
+```{r}
+tau <- 5
+mean(data_under_int[Delta == 1, Time] < tau) # With operations
+mean(data_under_int_no_op[Delta == 1, Time] < tau) # No operation
+```
+A larger percentage of subjects are dead before time $\tau$ when we do not perform operations. 
+
+

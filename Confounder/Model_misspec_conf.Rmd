@@ -1,0 +1,108 @@
+---
+title: "Model Misspecifications Confounder"
+author: "Michaela Lukacova"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libraries, incllude=FALSE}
+library(data.table)
+library(survival)
+library(ggplot2)
+library(simevent)
+theme_set(theme_bw())
+```
+
+# Functions
+
+Function for fitting models, with and without misspecifications
+
+```{r}
+fit_mod <- function(data, timefix = FALSE){
+  trans_data <- IntFormatData(data)
+
+  results <- matrix(nrow = 1, ncol = 2)
+  colnames(results) <- c("Fully Specified", "-L")
+  rownames(results) <- c("A")
+
+  # True model:
+  survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ I(L0/50) + A + L,
+                         data = trans_data, timefix = timefix)
+  results[,1] <- c(survfit_death$coefficients[2])
+
+  # Cox model only with operation:
+  survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ I(L0/50) + A,
+                         data = trans_data, timefix = timefix)
+
+  results[,2] <- c(survfit_death$coefficients[2])
+
+  return(results)
+}
+```
+
+Function for repeated simulation in order to investigate model misspecification
+
+```{r}
+sys_invest <- function(beta_L_A = 1, beta_L_D = 1, beta_A_D = -1, B = 200, N = 500, 
+                       beta_A_L = -0.5, beta_L0_A = 1, eta = rep(0.1, 4), 
+                       nu = rep(1.1, 4), timefix = FALSE) {
+
+  # Create results table
+  mod_est <- matrix(nrow = B, ncol = 2)
+
+  # Run simulations
+  for(i in 1:B){
+    sim <- simConfounding(N = N, beta_L_A = beta_L_A, beta_L_D = beta_L_D, 
+                          beta_A_D = beta_A_D, beta_A_L = beta_A_L, 
+                          beta_L0_A = beta_L0_A, eta = eta,
+                          nu = nu)
+    mod_est[i,] <- fit_mod(sim, timefix = timefix)
+  }
+
+  # create plots
+  plotdata <- data.table(mod_est)
+  names(plotdata) <- c("Fully Specified", "-L")
+
+  plotdata[, "True" := rep(beta_A_D, B)]
+
+  b1 <- plotdata[,.("Bias True" = mean(`Fully Specified` - True))]
+  b2 <- plotdata[,.("Bias -L" = mean(`-L`- True))]
+  
+  mean1 <- plotdata[,.("Mean est True" = mean(`Fully Specified`))]
+  mean2 <- plotdata[,.("Mean est -L" = mean(`-L`))]
+
+  stats <- cbind(b1, b2, mean1, mean2)
+
+  pp1 <- ggplot(data = plotdata)+
+    geom_histogram(aes(x = `Fully Specified`, y = ..density..), binwidth = 0.1,
+                   fill = "blue", alpha = 0.5, col = "white")+
+    geom_vline(aes(xintercept = True), color = "red", linetype = 2)
+
+  pp2 <- ggplot(data = plotdata)+
+    geom_histogram(aes(x = `-L`, y = ..density..), binwidth = 0.1,
+                   fill = "blue", alpha = 0.5, col = "white")+
+    geom_vline(aes(xintercept = True), color = "red", linetype = 2)
+
+  return(list(Stats = stats, pp1 = pp1, pp2 = pp2, data = plotdata))
+
+}
+```
+
+
+# Results
+
+```{r}
+set.seed(846)
+data <- sys_invest(beta_L_A = 3, beta_L_D = 3, beta_A_D = -0.5, 
+                   beta_A_L = -0.5, beta_L0_A = 1, timefix = FALSE,
+                   B = 1000, N = 1000)
+
+data[1]$Stats |> xtable::xtable(digits = 4)
+ggsave(data[2]$pp1 + xlab("Estimate"), file = "hidden_confounder_cox_true.pdf")
+ggsave(data[3]$pp2 + xlab("Estimate"), file = "hidden_confounder_cox_false.pdf")
+```
+
