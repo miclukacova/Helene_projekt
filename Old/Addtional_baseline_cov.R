@@ -19,7 +19,7 @@ survfit_oper <- coxph(Surv(tstart, tstop, Delta == 2) ~ I(L0/50) + A0 + L + L1 +
 # benchmarking
 
 my_bench <- bench::press(
-  N = 2^(4:10),
+  N = 2^(5:12),
   {
     bench::mark(
       "simEventData2" = simEventData2(N = N),
