@@ -1,5 +1,5 @@
 ---
-title: "Model Misspecifications Confounder"
+title: "Cox regression Confounder"
 author: "Michaela Lukacova"
 date: "`r Sys.Date()`"
 output: html_document
@@ -19,25 +19,26 @@ theme_set(theme_bw())
 
 # Functions
 
-Function for fitting models, with and without misspecifications
+Function for fitting models, with and without L
 
 ```{r}
 fit_mod <- function(data, timefix = FALSE){
   trans_data <- IntFormatData(data)
 
   results <- matrix(nrow = 1, ncol = 2)
-  colnames(results) <- c("Fully Specified", "-L")
+  colnames(results) <- c("M1", "M2")
   rownames(results) <- c("A")
 
-  # True model:
-  survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ I(L0/50) + A + L,
-                         data = trans_data, timefix = timefix)
-  results[,1] <- c(survfit_death$coefficients[2])
-
-  # Cox model only with operation:
+  # M1:
   survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ I(L0/50) + A,
                          data = trans_data, timefix = timefix)
-
+  
+  results[,1] <- c(survfit_death$coefficients[2])
+  
+  # M2:
+  survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ I(L0/50) + A + L,
+                         data = trans_data, timefix = timefix)
+  
   results[,2] <- c(survfit_death$coefficients[2])
 
   return(results)
@@ -65,27 +66,25 @@ sys_invest <- function(beta_L_A = 1, beta_L_D = 1, beta_A_D = -1, B = 200, N = 5
 
   # create plots
   plotdata <- data.table(mod_est)
-  names(plotdata) <- c("Fully Specified", "-L")
+  names(plotdata) <- c("M1", "M2")
 
-  plotdata[, "True" := rep(beta_A_D, B)]
-
-  b1 <- plotdata[,.("Bias True" = mean(`Fully Specified` - True))]
-  b2 <- plotdata[,.("Bias -L" = mean(`-L`- True))]
+  var1 <- plotdata[,.("Variance M1" = var(`M1`))]
+  var2 <- plotdata[,.("Variance M2" = var(`M2`))]
   
-  mean1 <- plotdata[,.("Mean est True" = mean(`Fully Specified`))]
-  mean2 <- plotdata[,.("Mean est -L" = mean(`-L`))]
+  mean1 <- plotdata[,.("Mean M1" = mean(`M1`))]
+  mean2 <- plotdata[,.("Mean M2" = mean(`M2`))]
 
-  stats <- cbind(b1, b2, mean1, mean2)
+  stats <- cbind(var1, var2, mean1, mean2)
 
   pp1 <- ggplot(data = plotdata)+
-    geom_histogram(aes(x = `Fully Specified`, y = ..density..), binwidth = 0.1,
+    geom_histogram(aes(x = `M2`, y = ..density..), binwidth = 0.1,
                    fill = "blue", alpha = 0.5, col = "white")+
-    geom_vline(aes(xintercept = True), color = "red", linetype = 2)
+    geom_vline(aes(xintercept = -0.5), color = "red", linetype = 2)
 
   pp2 <- ggplot(data = plotdata)+
-    geom_histogram(aes(x = `-L`, y = ..density..), binwidth = 0.1,
+    geom_histogram(aes(x = `M1`, y = ..density..), binwidth = 0.1,
                    fill = "blue", alpha = 0.5, col = "white")+
-    geom_vline(aes(xintercept = True), color = "red", linetype = 2)
+    geom_vline(aes(xintercept = -0.5), color = "red", linetype = 2)
 
   return(list(Stats = stats, pp1 = pp1, pp2 = pp2, data = plotdata))
 
