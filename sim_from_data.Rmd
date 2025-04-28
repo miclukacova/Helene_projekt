@@ -78,9 +78,15 @@ Estimates quite well.
 
 ## New data
 
-The inverse cumlative hazard of the waiting times is given by
+In order to simulate new data from an observed data set, we start out by initializing $N$ observations. We draw the $A_0$ covariate from a Bernoulli with probability $0.5$  and the $L_0$ we sample from the empirical distribution. We initialize the $T_0$ as $0$ and the cumulative hazard at this time as $0$. 
 
-$$\tilde{\Lambda}^{-1}_x(u |T_{k-1} = t) = \Lambda^{-1}_x(-\log u + \Lambda(t|F_{t-})|\mathcal{F}_{(u+t)-}) - t$$
+Then as long as we have individuals that are alive, we for each individual find the cumulative hazard functions of death and T2D. In order to simulate the next event time $T_k = T_{k-1} + W_k$ we need to find the waiting time $W_k$. We find this time by finding the waiting time of each event and taking the minimum, in this case, the waiting time of the death event $W_k^{death}$ and the waiting time of the T2D event $W_k^{T2D}$. $W_k^x$ is distributed with cumulative intensity
+$$ \tilde{\Lambda}^x(u|T_{k-1} = t) = \Lambda^x(u + t ) - \Lambda^x(t)$$
+We then have that
+$$(\tilde{\Lambda}^x)^{-1}(-\log(U)) \sim \tilde{\Lambda}^x(u)$$
+Where $U$ is a uniform random variable. The inverse cumulative intensity of the waiting times is given by
+$$(\tilde{\Lambda}^x)^{-1}(u |T_{k-1} = t, \mathcal{F}_{(u+t)-}) = \Lambda^{-1}_x(-\log u + \Lambda(t|F_{t-})|\mathcal{F}_{(u+t)-}) - t$$
+So in order to simulate event specific waiting times, we draw uniform random variables take the minus log and of this number take the inverse cumulative intensity and subtract $t$. 
 
 ```{r}
 max_events <- 2
