@@ -18,56 +18,62 @@ library(survival)
 library(simevent)
 library(ggplot2)
 library(prodlim)
+library(rstpm2)
 theme_set(theme_bw())
 ```
 
 # Monte Carlo approximation
 
-Simulate
 ```{r}
-data <- simT2D(
-  N = 5*10^4,
-  eta = c(0.1, 0.3, 0.1),
-  nu = c(1.1, 1.3, 1.1),
-  cens = 1,
-  beta_L0_D = 0.3,
-  beta_L0_L = 2,
-  beta_L_D = 1,
-  beta_A0_D = -0.1,
-  beta_A0_L = - 2.5
-)
-```
-Approximate
-```{r}
-# Group data based on treatment
-no_treat_group <- data[A0 == 0]
-treat_group <- data[A0 == 1]
-  
-# Fit Weibull
-survfit <- survreg(Surv(Time, Delta == 2) ~ 1, 
-                   data = no_treat_group[L == 0], 
-                   cluster = ID,
-                   dist='weibull')
-  
-# Estimates in no treatment group
-nu_est <- 1/survfit$scale
-eta_est <- 1/(exp(survfit$coefficients[1]))^nu_est
-```
+B1 <- 10
+N1 <- 2 * 10^5
+N2 <- 2 * 10^5
+tau <- 2
 
-```{r}
-# Generate large data set under the intervened intensity 
-data_new <- simT2D(N = 10^4, 
-                   eta = c(1.1, 1.3, eta_est),
-                   nu = c(0.1, 0.3, nu_est),
+set.seed(927)
+MC_ests_T2D <- matrix(nrow = B1, ncol = 2)
+for(b in 1:B1){
+  print(b)
+  # Simulate
+  data <- simT2D(N = N1,
+                 eta = c(0.1, 0.3, 0.1),
+                 nu = c(1.1, 1.3, 1.1),
+                 cens = 0,
+                 beta_L0_D = 0.3,
+                 beta_L0_L = 2,
+                 beta_L_D = 1,
+                 beta_A0_D = -0.1,
+                 beta_A0_L = - 2.5)
+  
+  # Format data for inference
+  data <- IntFormatData(data, N_cols = 6)
+  
+  # Group data based on treatment
+  no_treat_group <- data[A0 == 0]
+  treat_group <- data[A0 == 1]
+  
+  # Fit Weibull
+  survfit <- survreg(Surv(Time, Delta == 2) ~ 1, 
+                     data = no_treat_group[L == 0], 
+                     dist='weibull')
+    
+  # Estimates in no treatment group
+  nu_est <- 1/survfit$scale
+  eta_est <- 1/(exp(survfit$coefficients[1]))^nu_est
+  
+  # Generate large data set under the intervened intensity 
+  data_new <- simT2D(N = N2, 
+                   eta = c(0.1, 0.3, eta_est),
+                   nu = c(1.1, 1.3, nu_est),
                    cens = 0,
                    beta_L0_D = 0.3,
                    beta_L0_L = 2,
                    beta_L_D = 1,
                    beta_A0_D = -0.1,
                    beta_A0_L = - 2.5)
-
-# Generate large data set without intervened intensity
-data_new_no_int <- simT2D(N = 10^4,
+  
+  # Generate large data set without intervened intensity
+  data_new_no_int <- simT2D(N = N2,
                           eta = c(0.1, 0.3, 0.1),
                           nu = c(1.1, 1.3, 1.1),
                           cens = 0,
@@ -76,83 +82,140 @@ data_new_no_int <- simT2D(N = 10^4,
                           beta_L_D = 1,
                           beta_A0_D = -0.1,
                           beta_A0_L = - 2.5)
+  
+  #Proportion of subjects dying before some time $\tau$ in treatment group
+  MC_ests_T2D[b,] <- c(mean(data_new[Delta == 1 & A0 == 1, Time] < tau),  # with intervention
+  prop_no_int <- mean(data_new_no_int[Delta == 1 & A0 == 1, Time] < tau)) # without intervention
+}
 ```
 
-Calculate proportions
 ```{r}
-tau <- 1
-#Proportion of subjects dying before some time $\tau$ in treatment group
-prop_int <- mean(data_new[Delta == 1 & A0 == 1, Time] < tau) # with intervention
-prop_no_int <- mean(data_new_no_int[Delta == 1 & A0 == 1, Time] < tau) # without intervention
+beta_true <- mean(MC_ests_T2D[,2]-MC_ests_T2D[,1])
+beta_true
+var(MC_ests_T2D[,2]-MC_ests_T2D[,1])
 ```
 
 
 # Intervention effects
 
-```{r}
-int_effect <- function(N1, 
-                       N2, 
-                       eta = c(0.1, 0.3, 0.1),
-                       nu = c(1.1, 1.3, 1.1),
-                       cens = 1,
-                       beta_L0_D = 0.3,
-                       beta_L0_L = 2,
-                       beta_L_D = 1,
-                       beta_A0_D = -0.1,
-                       beta_A0_L = - 2.5) {
-  
-  # Generate large data
-  data0 <- simT2D(N1, 
-                  eta = eta, 
-                  nu = nu,
-                  cens = cens,
-                  beta_A0_D = beta_A0_D, 
-                  beta_L0_L = beta_L0_L, 
-                  beta_A0_L = beta_A0_L, 
-                  beta_L_D = beta_L_D, 
-                  beta_L0_D = beta_L0_D)
-  
-  # Group data based on treatment
-  no_treat_group <- data0[A0 == 0]
-  treat_group <- data0[A0 == 1]
-  
-  # Fit Weibull
-  survfit <- survreg(Surv(Time, Delta == 3) ~ 1, 
-                     data = no_treat_group[L == 0], 
-                     cluster = ID,
-                     dist='weibull')
-  
-  # Estimates in no treatment group
-  nu_est <- 1/survfit$scale
-  eta_est <- 1/(exp(survfit$coefficients[1]))^nu_est
-  
-  # Generate large data set under the intervened intensity 
-  data_new <- simT2D(N = N2, 
-                     cens = 0,
-                     eta = c(eta[1:2],eta_est),
-                     nu = c(nu[1:2],nu_est),
-                     beta_A0_D = beta_A0_D, 
-                     beta_L_D = beta_L_D, 
-                     beta_L0_D = beta_L0_D,
-                     beta_L0_L = 0,
-                     beta_A0_L = 0)
+Estimations procedure:
 
-  # Generate large data set without intervened intensity
-  data_new_no_int <- simT2D(N = N2, 
-                            eta = eta, 
-                            nu = nu,
-                            beta_A0_D = beta_A0_D, 
-                            beta_L0_L = beta_L0_L, 
-                            beta_A0_L = beta_A0_L, 
-                            beta_L_D = beta_L_D, 
-                            beta_L0_D = beta_L0_D,
-                            cens = 0)
-  #Proportion of subjects dying before some time $\tau$ in treatment group
-  prop_int <- mean(data_new[Delta == 1 & A0 == 1, Time] < tau) # with intervention
-  prop_no_int <- mean(data_new_no_int[Delta == 1 & A0 == 1, Time] < tau) # without intervention
-  
-  return(c(prop_int, prop_no_int))
-}
+```{r}
+#int_effect <- function(N1, 
+#                       N2, 
+#                       eta = c(0.1, 0.3, 0.1),
+#                       nu = c(1.1, 1.3, 1.1),
+#                       beta_L0_D = 0.3,
+#                       beta_L0_L = 2,
+#                       beta_L_D = 1,
+#                       beta_A0_D = -0.1,
+#                       beta_A0_L = - 2.5) {
+#  
+#  # Generate large data
+#  data0 <- simT2D(N1, 
+#                  eta = eta, 
+#                  nu = nu,
+#                  cens = 1,
+#                  beta_A0_D = beta_A0_D, 
+#                  beta_L0_L = beta_L0_L, 
+#                  beta_A0_L = beta_A0_L, 
+#                  beta_L_D = beta_L_D, 
+#                  beta_L0_D = beta_L0_D)
+#  
+#  # Format data for inference
+#  data0 <- IntFormatData(data0, N_cols = 6)
+#  
+#  # Fit Weibull
+#  survfit1 <- survreg(Surv(Time, Delta == 1) ~ L0 + A0 + L, 
+#                     data = data0, 
+#                     dist='weibull')
+#  
+#  survfit2 <- survreg(Surv(Time, Delta == 2) ~ L0 + A0, 
+#                      data = data0[L == 0], 
+#                      dist='weibull')
+#  
+#  # Shape and scale estimates
+#  nu_est1 <- 1/survfit1$scale                                      
+#  eta_est1 <- 1/(exp(survfit1$coefficients[1]))^nu_est1            
+#  
+#  nu_est2 <- 1/survfit2$scale
+#  eta_est2 <- 1/(exp(survfit2$coefficients[1]))^nu_est2
+#  
+#  # Coeffecients
+#  beta_L0_D_est <- - survfit1$coefficients[2] / nu_est1
+#  beta_A0_D_est <- - survfit1$coefficients[3] / nu_est1
+#  beta_L_D_est <- - survfit1$coefficients[4] / nu_est1
+#  beta_L0_L_est <- - survfit2$coefficients[2] / nu_est2
+#  beta_A0_L_est <- - survfit2$coefficients[3] / nu_est2
+#  
+#  # Intervention intensity
+#  survfit3 <- survreg(Surv(Time, Delta == 2) ~ 1, 
+#                      data = data0[L == 0 & A0 == 0], 
+#                      dist='weibull')
+#  
+#  # Estimates in no treatment group
+#  nu_est3 <- 1/survfit3$scale
+#  eta_est3 <- 1/(exp(survfit3$coefficients[1]))^nu_est3
+#  
+#  # Generate large data set under the intervened intensity 
+#  data_new <- simT2D(N = N2, 
+#                     cens = 0,
+#                     eta = c(0, eta_est1, eta_est3),
+#                     nu = c(0, nu_est1, nu_est3),
+#                     beta_A0_D = beta_A0_D_est, 
+#                     beta_L_D = beta_L_D_est, 
+#                     beta_L0_D = beta_L0_D_est,
+#                     beta_L0_L = 0,
+#                     beta_A0_L = 0)
+#
+#  # Generate large data set without intervened intensity
+#  data_new_no_int <- simT2D(N = N2, 
+#                            cens = 0,
+#                            eta = c(0, eta_est1, eta_est2),
+#                            nu = c(0, nu_est1, nu_est2),
+#                            beta_A0_D = beta_A0_D_est, 
+#                            beta_L_D = beta_L_D_est, 
+#                            beta_L0_D = beta_L0_D_est,
+#                            beta_L0_L = beta_L0_L_est,
+#                            beta_A0_L = beta_A0_L_est)
+#  
+#  #Proportion of subjects dying before some time $\tau$ in treatment group
+#  prop_int <- mean(data_new[Delta == 1 & A0 == 1, Time] < tau) # with intervention
+#  prop_no_int <- mean(data_new_no_int[Delta == 1 & A0 == 1, Time] < tau) # without intervention
+#  
+#  return(c(prop_int, prop_no_int))
+#}
 ```
 
+Gentagne estimationer:
+
+```{r}
+#B <- 300
+#simres <- matrix(nrow = B, ncol = 2)
+#
+#for(b in 1:B){
+#  simres[b,] <- int_effect(N1 = 10^3, N2 = 10^4) 
+#}
+```
+
+
+```{r}
+#betas <- simres[,2] - simres[,1]
+#mean(betas)
+#var(betas)
+#
+#ggplot()+
+#  geom_histogram(aes(x = betas, y = ..density..), binwidth = 0.004)+
+#  geom_vline(xintercept = beta_true)
+```
+
+
+```{r}
+#survfit <- stpm2(Surv(tstart, tstop, Delta == 1) ~ L0 + A0 + L,
+#                  data = data,
+#                  df = 1)
+#survfit2 <- stpm2(Surv(tstart, tstop, Delta == 2) ~ L0 + A0,
+#                  data = data[L == 0],
+#                  df = 1)
+```
 

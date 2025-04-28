@@ -1,6 +1,8 @@
 ---
 title: "Kaplan-Meier Simulation Study"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 
@@ -9,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 
-```{r setup, include=FALSE}
+```{r, include=FALSE}
 # Libraries
 library(data.table)
 library(survival)
@@ -23,7 +25,7 @@ theme_set(theme_bw())
 
 In the following a simulation study is conducted, where we investigate the Kaplan-Meier estimator. The estimand is
 $$S(\tau | A_0 = 1) = P(T \geq \tau | A_0 = 1) , \quad S(\tau | A_0 = 0) = P(T \geq \tau | A_0 = 0)$$
-For some $\tau \in \RR$. $T$ is here the survival time *post* T2D diagnose. As mentioned the survival function will be estimated by the Kaplan-Meier estimator. Post T2D diagnose the setting is simpler, as there are no competing events, only death and censoring. The Kaplan-Meier estimator will then be an unbiased estimator of the survival probability. 
+For some $\tau$. $T$ is here the survival time *post* T2D diagnose. As mentioned the survival function will be estimated by the Kaplan-Meier estimator. Post T2D diagnose the setting is simpler, as there are no competing events, only death and censoring. The Kaplan-Meier estimator will then be an unbiased estimator of the survival probability. 
 
 The true value of $P(T \geq \tau | A_0 = a_0)$ can be estimated by a Monte Carlo approach. That is by simulating a large data set without censoring, and calculating the proportion of dead at time $\tau$ post T2D diagnose, in respectively treatment and placebo group. 
 
@@ -32,10 +34,10 @@ After having estimated the true value, we generate $B$ data sets with $N$ indivi
 We conduct the simulation study for the following 4 different parameter values
 
 ```{r}
-beta_L0_L <- c(1.5, 1.3, 2, 1)
-beta_A0_L <- c(-1, -1.3, -2.5, -1.2)
-beta_L_D <- c(0.9, 1, 1, 0.8)
-beta_L0_D <- c(0.6, 0.7, 0.3, 0.6)
+beta_L0_L <- c(1.5, 1.3, 2, 0.9)
+beta_A0_L <- c(-1, -2, -3, -1.2)
+beta_L_D <- c(0.9, 1, 0.5, 0.8)
+beta_L0_D <- c(0.6, 0.7, 0, 0.6)
 beta_A0_D <- c(0, 0, -0.1, -0.2)
 ```
 
@@ -52,33 +54,35 @@ We simulate the large data
 
 ```{r}
 set.seed(836)
-N <- 10^5
-data1 <- simT2D(N = N, eta = eta, nu = nu, beta_L0_D = beta_L0_D[1], 
+N <- 2*10^5
+data_list <- list()
+
+for(i in 0:3){
+  data_list[[i*4 + 1]] <- simT2D(N = N, eta = eta, nu = nu, beta_L0_D = beta_L0_D[1], 
                 beta_L0_L = beta_L0_L[1], beta_A0_L = beta_A0_L[1], 
                 beta_L_D = beta_L_D[1], beta_A0_D = beta_A0_D[1], cens = 0)
-data2 <- simT2D(N = N, eta = eta, nu = nu, beta_L0_D = beta_L0_D[2], 
+  data_list[[i*4 + 2]] <- simT2D(N = N, eta = eta, nu = nu, beta_L0_D = beta_L0_D[2], 
                 beta_L0_L = beta_L0_L[2], beta_A0_L = beta_A0_L[2], 
                 beta_L_D = beta_L_D[2], beta_A0_D = beta_A0_D[2], cens = 0)
-data3 <- simT2D(N = N, eta = eta, nu = nu, beta_L0_D = beta_L0_D[3], 
+  data_list[[i*4 + 3]] <- simT2D(N = N, eta = eta, nu = nu, beta_L0_D = beta_L0_D[3], 
                 beta_L0_L = beta_L0_L[3], beta_A0_L = beta_A0_L[3], 
                 beta_L_D = beta_L_D[3], beta_A0_D = beta_A0_D[3], cens = 0)
-data4 <- simT2D(N = N, eta = eta, nu = nu,, beta_L0_D = beta_L0_D[4], 
+  data_list[[i*4 + 4]] <- simT2D(N = N, eta = eta, nu = nu,, beta_L0_D = beta_L0_D[4], 
                 beta_L0_L = beta_L0_L[4], beta_A0_L = beta_A0_L[4], 
                 beta_L_D = beta_L_D[4], beta_A0_D = beta_A0_D[4], cens = 0)
-
-data_list <- list(data1, data2, data3, data4)
+}
 ```
 
 We calculate the survival proportion $\tau = 1$ years post T2D diagnose for each data set. 
 
 ```{r}
 tau <- 1
-surv_prop1 <- numeric(4)
-surv_prop0 <- numeric(4)
+surv_prop1 <- numeric(16)
+surv_prop0 <- numeric(16)
 
-for(i in 1:4){
+for(i in 1:16){
   # T2D events
-  T2D_events <- data_list[[i]][Delta == 3]
+  T2D_events <- data_list[[i]][Delta == 2]
 
   # T2D people
   T2D_peeps <- data_list[[i]][ID %in% T2D_events$ID]
@@ -87,14 +91,26 @@ for(i in 1:4){
   T2D_peeps[, Time_T2D := Time - min(Time), by = ID]
   
   # Removing the new Time 0
-  T2D_peeps <- T2D_peeps[Delta != 3]
-  
-  # Proportion of treatment and placebo patients who have died before tau time after T2D diagnose
-  prop_treat <- nrow(T2D_peeps[Time_T2D < tau & A0 == 1]) / nrow(T2D_peeps[A0 == 1]) 
-  prop_plac <- 
+  T2D_peeps <- T2D_peeps[Delta != 2]
   
   surv_prop1[i] <- nrow(T2D_peeps[Time_T2D > tau & A0 == 1]) / nrow(T2D_peeps[A0 == 1]) 
   surv_prop0[i] <- nrow(T2D_peeps[Time_T2D > tau & A0 == 0]) / nrow(T2D_peeps[A0 == 0]) 
+}
+```
+
+We find the mean and variance
+
+```{r}
+surv_prop_mean1 <- numeric(4)
+surv_prop_mean0 <- numeric(4)
+surv_prop_sd1 <- numeric(4)
+surv_prop_sd0 <- numeric(4)
+
+for(i in 1:4){
+  surv_prop_mean1[i] <- mean(surv_prop1[0 : 3 * 4 + i])
+  surv_prop_mean0[i] <- mean(surv_prop0[0 : 3 * 4 + i])
+  surv_prop_sd1[i] <- sd(surv_prop1[0 : 3 * 4 + i])
+  surv_prop_sd0[i] <- sd(surv_prop0[0 : 3 * 4 + i])
 }
 
 ```
@@ -162,7 +178,7 @@ plot_data[,.(Bias=mean(ests - true_val)), by = .(Setting, A0)] |> knitr::kable()
 
 ```{r}
 plot_data[,.(Coverage=mean(Lower <= true_val & true_val <= Upper)), by = .(Setting, A0)] |> knitr::kable()
-#plot_data[,.(Coverage=mean(Lower <= true_val & true_val <= Upper)), by = .(Setting, A0)] |> xtable::xtable()
+plot_data[,.(Coverage=mean(Lower <= true_val & true_val <= Upper)), by = .(Setting, A0)] |> xtable::xtable()
 
 ```
 

@@ -1,0 +1,137 @@
+---
+title: "T2D Scenarios and Estimators"
+output:
+  pdf_document:
+    latex_engine: xelatex
+  html_document: default
+date: "2024-10-18"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r libraries, include=FALSE}
+# Libraries
+library(data.table)
+library(survival)
+library(simevent)
+library(ggplot2)
+library(knitr)
+theme_set(theme_bw())
+```
+
+I am interested in what happens when the effect of L0 on L and the effect of L0 on D changes. In my mind this would lead to a selection of individuals, and an increased survival probability in the placebo group post T2D diagnose. 
+
+```{r, results='hide'}
+N <-  10^5
+
+compare_effects <- function(estimator, beta_L0_L, beta_L_D, beta_A0_L, beta_L0_D,
+                            beta_A0_D, eta, nu, N) {
+  B <-  max(length(beta_L0_L), length(beta_L_D), length(beta_A0_L), length(beta_L0_D), length(beta_A0_D))
+  
+  # All other parameters are repeated 
+  if(length(beta_L0_L) < B) beta_L0_L <- rep(beta_L0_L, B)
+  if(length(beta_L_D) < B) beta_L_D <- rep(beta_L_D, B)
+  if(length(beta_A0_L) < B) beta_A0_L <- rep(beta_A0_L, B)
+  if(length(beta_L0_D) < B) beta_L0_D <- rep(beta_L0_D, B)
+  if(length(beta_A0_D) < B) beta_A0_D <- rep(beta_A0_D, B)
+  
+  # A matrix for the results
+  res <- matrix(nrow = B, ncol = 2)
+  
+  for(i in 1:B){
+    dataA <- simT2D(N = N, eta = eta, nu = nu, beta_L0_D = beta_L0_D[i], 
+                   beta_L0_L = beta_L0_L[i], beta_A0_L = beta_A0_L[i], 
+                   beta_L_D = beta_L_D[i], beta_A0_D = beta_A0_D[i], cens = 0)
+    res[i,1:2] <- estimator(dataA)
+  }
+  return(res)
+}
+
+estimator1 <- function(data) {
+  # T2D events
+  T2D_events <- data[Delta == 2]
+  # T2D people
+  T2D_peeps <- data[ID %in% T2D_events$ID]
+ 
+  # Setting T_0 to debut time of diabetes
+  T2D_peeps[, Time_T2D := Time - min(Time), by = ID]
+  
+  # Removing the new Time 0
+  T2D_peeps <- T2D_peeps[Delta != 2]
+  
+  # Proportion of treatment and placebo patients who have died before 1 year after T2D diagnose
+  prop_treat <- nrow(T2D_peeps[Time_T2D < 1 & Delta == 1 & A0 == 1]) / length(unique(T2D_peeps[A0 == 1]$ID))
+  prop_plac <- nrow(T2D_peeps[Time_T2D < 1 & Delta == 1 & A0 == 0]) / length(unique(T2D_peeps[A0 == 0]$ID))
+  
+  # The proportion dead
+  return(c(prop_plac, prop_treat))
+}
+```
+
+Below we calculate the proportion of dead T2D patients 1 year post T2D diagnose. We do this in when the effect of the drug on Death is $-0.1$. The effect of $L_0$ on T2D is let to vary from $0$ to $2.5$ by $0.15$. The effect of $A_0$ on T2D is large ($=-1$). And the effect of T2D on death is moderate ($=1$). There is no effect of $L_0$ directly on death. 
+
+```{r}
+res1 <- compare_effects(estimator = estimator1, 
+                        N = N, 
+                        eta = c(0.1,0.3,0.1), 
+                        nu = c(1.1,1.3,1.1),
+                        beta_L0_L = seq(0, 2.5, by = 0.15), 
+                        beta_A0_L = -1, 
+                        beta_L_D = 0.5, 
+                        beta_A0_D = 0,
+                        beta_L0_D = 0)
+
+ggplot()+
+  geom_line(aes(x = seq(0, 2.5, by = 0.15), y = res1[,1], color = "placebo"))+
+  geom_line(aes(x = seq(0, 2.5, by = 0.15), y = res1[,2], color = "treatment"))+
+  scale_color_manual(values = c("placebo" = "blue", "treatment" = "red"))+
+  ylab("Proportion dead 1 year post T2D")+
+  xlab("Effect of L0 on T2D")+
+  labs(title = "Effect of the drug on Death is -0.1")
+```
+
+We do the same, now with the effect of $L_0$ directly on death is $1$. 
+
+```{r}
+res2 <- compare_effects(estimator = estimator1, 
+                        N = N, 
+                        eta = c(0.1,0.3,0.1), 
+                        nu = c(1.1,1.3,1.1),
+                        beta_L0_L = seq(0, 2.5, by = 0.15), 
+                        beta_A0_L = -1, 
+                        beta_L_D = 1, 
+                        beta_A0_D = 0,
+                        beta_L0_D = 1)
+
+ggplot()+
+  geom_line(aes(x = seq(0, 2.5, by = 0.15), y = res2[,1], color = "placebo"))+
+  geom_line(aes(x = seq(0, 2.5, by = 0.15), y = res2[,2], color = "treatment"))+
+  scale_color_manual(values = c("treatment" = "red", "placebo" = "blue"))+
+  ylab("Proportion dead 1 year post T2D")+
+  xlab("Effect of L0 on T2D")+
+  labs(title = "Effect of the drug on Death is -0.1")
+```
+We conduct the simulations one last time, now the effect of $L_0$ directly on death is $2$. 
+
+```{r}
+res2 <- compare_effects(estimator = estimator1, 
+                        N = N, 
+                        eta = c(0.1,0.3,0.1), 
+                        nu = c(1.1,1.3,1.1),
+                        beta_L0_L = seq(0, 2.5, by = 0.15), 
+                        beta_A0_L = -1, 
+                        beta_L_D = 1, 
+                        beta_A0_D = 0,
+                        beta_L0_D = 2)
+
+ggplot()+
+  geom_line(aes(x = seq(0, 2.5, by = 0.15), y = res2[,1], color = "placebo"))+
+  geom_line(aes(x = seq(0, 2.5, by = 0.15), y = res2[,2], color = "treatment"))+
+  scale_color_manual(values = c("treatment" = "red", "placebo" = "blue"))+
+  ylab("Proportion dead 1 year post T2D")+
+  xlab("Effect of L0 on T2D")+
+  labs(title = "Effect of the drug on Death is -0.1")
+```

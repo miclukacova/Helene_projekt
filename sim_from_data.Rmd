@@ -1,0 +1,183 @@
+---
+title: "Estimations"
+author: "Michaela Lukacova"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libraries, include=FALSE}
+# Libraries
+library(data.table)
+library(survival)
+library(simevent)
+library(ggplot2)
+library(prodlim)
+library(rstpm2)
+theme_set(theme_bw())
+```
+
+# T2D
+
+## Generate data
+
+```{r}
+set.seed(373)
+data <- simT2D(N = 5000, beta_A0_L = -1)
+```
+
+## Estimation
+
+We fit the models
+
+```{r}
+# Transform data into tstart tstop format
+data_int <- IntFormatData(data, N_cols = 6)
+
+# Fit Cox models
+survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0 + A0 + L, data = data_int)
+survfit_t2d <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A0, data = data_int[L == 0])
+```
+
+A little test
+
+```{r}
+newdata <- data.frame("A0" = 0, "L0" = 0.5, "L" = 0)
+surv_death <- survfit(survfit_death, newdata = newdata, method = "breslow")
+true_surv_death_func <- function(t) exp( - 0.1  * t^(1.1) * exp(1 * 0.5 + 0 * (-1) + 0 * 1))
+surv_t2d <- survfit(survfit_t2d, newdata = newdata, method = "breslow")
+true_surv_t2d_func <- function(t) exp( - 0.1  * t^(1.1) * exp(1 * 0.5))
+
+ggplot(data = data.frame(x = surv_death$time, y = surv_death$surv))+
+  geom_line(aes(x = x, y = y), color = "red") +
+  geom_function(fun = true_surv_death_func)
+
+ggplot(data = data.frame(x = surv_t2d$time, y = surv_t2d$surv))+
+  geom_line(aes(x = x, y = y), color = "red") +
+  geom_function(fun = true_surv_t2d_func)
+```
+
+Estimates quite well. 
+
+```{r}
+true_cumhaz_death <- function(t) 0.1  * t^(1.1) * exp(1 * 0.687565 + 0 * (-1) + 0 * 1)
+ggplot()+
+  geom_line(aes(x = cumhaz_death$time, y = cumhaz_death[,1]))+
+  geom_function(fun = true_cumhaz_death, color = "red")
+
+true_cumhaz_t2d <- function(t) 0.1  * t^(1.1) * exp(1 * 0.687565)
+ggplot()+
+  geom_line(aes(x = cumhaz_t2d$time, y = cumhaz_t2d[,1]))+
+  geom_function(fun = true_cumhaz_t2d, color = "red")
+
+```
+
+
+## New data
+
+```{r}
+max_events <- 2
+
+# Baseline
+N <- 1000
+alive <- 1:N
+T_k <- lambda_T_k_death <- lambda_T_k_t2d <- death_times <- t2d_times <- rep(0, N)
+sim_data <- data.frame(
+  L0 = sample(data$L0, N, replace = TRUE),  # sample med replacement fra gammel data
+  A0 = rbinom(N, 1, 0.5),
+  L = 0
+)
+
+res_list <- vector("list", max_events)             # For results
+idx <- 1                                           # Index
+
+cum_haz <- function(hazz_vals, time_vals, t) {
+  # We find all the cumulative hazard values corresponding to times smaller than t
+  cum_haz_t <- hazz_vals[time_vals <= t]
+  # We take the maximal of these, or if there are none return 0
+  ifelse(length(cum_haz_t) == 0, 0, max(cum_haz_t))
+}
+
+inv_cum_haz <- function(hazz_vals, time_vals, p) {
+  # We find the time corresponding to the hazard values larger than p
+  T_k_1 <- time_vals[hazz_vals >= p]
+  # We find the inverse cumulative hazard
+  ifelse(length(T_k_1) == 0, max(time_vals), min(T_k_1))
+}
+
+while(length(alive) != 0){
+  # Cumulative hazard
+  cumhaz_death <- basehaz(survfit_death, sim_data)
+  cumhaz_t2d <- basehaz(survfit_t2d, sim_data)        
+  
+  # Jump times of the cumulative hazard
+  time_death <- cumhaz_death$time
+  time_t2d <- cumhaz_t2d$time
+  
+  # We find the cumulative hazard at the event time
+  lambda_T_k_death <- sapply(1:N, function(i) cum_haz(cumhaz_death[,i], time_death, death_times[i]))
+  lambda_T_k_t2d <- sapply(1:N, function(i) cum_haz(cumhaz_t2d[,i], time_t2d, t2d_times[i]))
+  
+  # Finding the inter event times
+  U <- -log(runif(N))
+  V_death <- U + lambda_T_k_death
+  V_t2d <- U + lambda_T_k_t2d
+  death_times  <- sapply(alive, function(i) inv_cum_haz(cumhaz_death[,i], time_death, V_death[i])) 
+  t2d_times  <-  sapply(alive, function(i) inv_cum_haz(cumhaz_t2d[,i], time_t2d, V_t2d[i]))
+  
+  # You can only experience T2D once
+  t2d_times[sim_data[alive,"L"]>0] <- Inf
+  
+  # The next event is the minimum of these events
+  T_k <- pmin(t2d_times, death_times)
+  Deltas <- 1 + as.numeric(t2d_times == T_k)
+  
+  # Update event counts
+  sim_data[alive, 3] <- sim_data[alive, 3] + as.numeric(Deltas == 2)
+  
+  # Store data
+  kth_event <- data.table(ID = alive,
+                          Time = T_k,
+                          Delta = Deltas)
+
+  res_list[[idx]] <- cbind(kth_event, data.table::as.data.table(sim_data[alive, , drop = FALSE]))
+  idx <- idx + 1
+  
+  # Who is still alive?
+  alive <- alive[Deltas != 1]
+}
+
+res <- data.table::rbindlist(res_list)
+setkey(res, ID)
+```
+
+
+## check whether simulated data has the desired intensitities...
+
+```{r}
+# Transform data into tstart tstop format
+data_int2 <- IntFormatData(res, N_cols = 6)
+
+# Fit Cox models
+survfit_death2 <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0 + A0 + L, data = data_int2)
+survfit_t2d2 <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A0, data = data_int2[L == 0])
+
+surv_death2 <- survfit(survfit_death2, newdata = newdata, method = "breslow")
+surv_t2d2 <- survfit(survfit_t2d2, newdata = newdata, method = "breslow")
+
+ggplot()+
+  geom_line(aes(x = surv_death$time, y = surv_death$surv), color = "red") +
+  geom_line(aes(x = surv_death2$time, y = surv_death2$surv), color = "blue") +
+  geom_function(fun = true_surv_death_func)
+
+ggplot()+
+  geom_line(aes(x = surv_t2d$time, y = surv_t2d$surv), color = "red") +
+  geom_line(aes(x = surv_t2d2$time, y = surv_t2d2$surv), color = "blue") +
+  geom_function(fun = true_surv_t2d_func)
+```
+
+
+

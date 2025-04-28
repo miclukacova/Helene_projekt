@@ -23,7 +23,7 @@ Function for fitting models, with and without L
 
 ```{r}
 fit_mod <- function(data, timefix = FALSE){
-  trans_data <- IntFormatData(data)
+  trans_data <- IntFormatData(data, N_cols = c(5,6))
 
   results <- matrix(nrow = 1, ncol = 2)
   colnames(results) <- c("M1", "M2")

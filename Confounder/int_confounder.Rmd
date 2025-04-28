@@ -21,74 +21,115 @@ library(microbenchmark)
 theme_set(theme_bw())
 ```
 
-Function for the approach
-
-```{r}
-intEffectConf <- function(N1 = 500, N2 = 1000, tau = 2) {
-  # Gennerate data 
-  data0 <- simConfounding(N = N1, beta_L_A = 3, beta_L_D = 3, beta_A_D = -0.5,
-                          beta_A_L = -0.5, beta_L0_A = 1, beta_L0_L = 1,
-                          beta_L0_D = 1, cens = 1, op = 1)
-  # Format Data
-  data0Int <- IntFormatData(data0, N_cols = 5:6)
-  
-  # Fit Weibull
-  fit0 <- survreg(Surv(Time, Delta == 2) ~ 1, 
-                   data = data0Int[A == 0], 
-                   cluster = ID,
-                   dist='weibull')
-  
-  # Generate data without intervention
-  data1 <- simConfounding(N = N2, beta_L_A = 0, beta_L_D = 3, beta_A_D = -0.5, 
-                          beta_A_L = -0.5, beta_L0_A = 0, beta_L0_L = 1, beta_L0_D = 1, 
-                          cens = 0, op = 1, eta = c(rep(0.1,2), eta0, 0.1), nu = c(rep(1.1,2), nu0, 1.1))
-  
-  # Generate data under intervention
-  dataInt <- simConfounding(N = N2, beta_L_A = 0, beta_L_D = 3, beta_A_D = -0.5, 
-                            beta_A_L = -0.5, beta_L0_A = 0, beta_L0_L = 1, beta_L0_D = 1, 
-                            cens = 0, op = 0, eta = c(rep(0.1,2), eta0, 0.1), nu = c(rep(1.1,2), nu0, 1.1))
-  
-  return(c(
-    mean(data1[Delta == 1, Time] < tau), # Data under observed probability distribution
-    mean(dataInt[Delta == 1, Time] < tau)) # Intervened data
-  )
-}
-```
-
 
 # Monte Carlo Approximation of True Value
 
 ```{r}
-# set.seed(435)
-true_val <- intEffectConf(N1 <- 10^5, N2 = 10^5)
-```
+set.seed(103)
+B1 <- 10
+N1 <- 10^5
+N2 <- 10^5
+tau <- 2
+MC_ests <- matrix(nrow = B1, ncol = 2)
 
-
-
-# Estimation
-
-```{r}
-B <- 500
-res <- matrix(ncol = 2, nrow = B)
-colnames(res) <- c("op", "no op")
-
-for(b in 1:B){
-  res[b,] <- intEffectConf(N1 = 500, N2 = 1000)
+for(i in 1:B1){
+  print(i)
+  # Gennerate data 
+  data0 <- simConfounding(N = N1, beta_L_A = 3, beta_L_D = 3, beta_A_D = -0.5,
+                          beta_A_L = -0.5, beta_L0_A = 1, beta_L0_L = 1,
+                          beta_L0_D = 1, cens = 0, op = 1)
+  # Format Data
+  data0Int <- IntFormatData(data0, N_cols = 5:6)
+  
+  # Generate data without intervention
+  data1 <- simConfounding(N = N2, beta_L_A = 3, beta_L_D = 3, beta_A_D = -0.5, 
+                          beta_A_L = -0.5, beta_L0_A = 1, beta_L0_L = 1, beta_L0_D = 1, 
+                          cens = 0, op = 1)
+  
+  # Generate data under intervention
+  dataInt <- simConfounding(N = N2, beta_L_A = 0, beta_L_D = 3, beta_A_D = -0.5, 
+                            beta_A_L = -0.5, beta_L0_A = 0, beta_L0_L = 1, beta_L0_D = 1, 
+                            cens = 0, op = 0)
+  
+  MC_ests[i,] <- c(mean(data1[Delta == 1, Time] < tau), # Data under observed probability distribution
+               mean(dataInt[Delta == 1, Time] < tau)) # Intervened data
 }
 ```
 
 ```{r}
-beta <- res[,1] - res[,2]
+beta_true <- mean(MC_ests[,1]- MC_ests[,2])
+var_beta_true <- var(MC_ests[,1]- MC_ests[,2])
 
-meanRes <- mean(beta)
-varRes <- var(beta)
+beta_true
+var_beta_true
+```
 
-pp1 <- ggplot(data = res)+
-  geom_histogram(aes(x = beta, y = ..density..), binwidth = 0.007,
-                 fill = "blue", alpha = 0.5, col = "white")+
-  geom_vline(aes(xintercept = true_val[1] - true_val[2]), color = "red", linetype = 2)
+# Estimation
 
-ggsave(pp1 + xlab("Estimate"), file = "int_conf.pdf")
+Function for the approach
+
+```{r}
+#intEffectConf <- function(N1 = 500, N2 = 1000, tau = 2) {
+#  # Gennerate data 
+#  data0 <- simConfounding(N = N1, beta_L_A = 3, beta_L_D = 3, beta_A_D = -0.5,
+#                          beta_A_L = -0.5, beta_L0_A = 1, beta_L0_L = 1,
+#                          beta_L0_D = 1, cens = 1, op = 1)
+#  # Format Data
+#  data0 <- IntFormatData(data0, N_cols = 5:6)
+#  
+#  # Fit Weibulls
+#  fit0 <- survreg(Surv(Time, Delta == 0) ~ 1, 
+#                  data = data0, 
+#                  dist='weibull')
+#  fit1 <- survreg(Surv(Time, Delta == 1) ~ 1, 
+#                  data = data0, 
+#                  dist='weibull')
+#  fit2 <- survreg(Surv(Time, Delta == 2) ~ 1, 
+#                  data = data0[A == 0], 
+#                  dist='weibull')
+#  fit3 <- survreg(Surv(Time, Delta == 3) ~ 1, 
+#                  data = data0[L == 0], 
+#                  dist='weibull')
+#  
+#  # Generate data without intervention
+#  data1 <- simConfounding(N = N2, beta_L_A = 0, beta_L_D = 0, beta_A_D = 0, 
+#                          beta_A_L = 0, beta_L0_A = 0, beta_L0_L = 0, beta_L0_D = 0, 
+#                          cens = 0, op = 1, eta = c(rep(0.1,2), eta0, 0.1), nu = c(rep(1.1,2), nu0, 1.1))
+#  
+#  # Generate data under intervention
+#  dataInt <- simConfounding(N = N2, beta_L_A = 0, beta_L_D = 0, beta_A_D = 0, 
+#                            beta_A_L = 0, beta_L0_A = 0, beta_L0_L = 0, beta_L0_D = 0, 
+#                            cens = 0, op = 0, eta = c(rep(0.1,2), 0, 0.1), nu = c(rep(1.1,2), 0, 1.1))
+#  
+#  return(c(
+#    mean(data1[Delta == 1, Time] < tau), # Data under observed probability distribution
+#    mean(dataInt[Delta == 1, Time] < tau)) # Intervened data
+#  )
+#}
+```
+
+```{r}
+#B <- 500
+#res <- matrix(ncol = 2, nrow = B)
+#colnames(res) <- c("op", "no op")
+#
+#for(b in 1:B){
+#  res[b,] <- intEffectConf(N1 = 500, N2 = 1000, cens = 1)
+#}
+```
+
+```{r}
+#beta <- res[,1] - res[,2]
+#
+#meanRes <- mean(beta)
+#varRes <- var(beta)
+#
+#pp1 <- ggplot(data = res)+
+#  geom_histogram(aes(x = beta, y = ..density..), binwidth = 0.007,
+#                 fill = "blue", alpha = 0.5, col = "white")+
+#  geom_vline(aes(xintercept = true_val[1] - true_val[2]), color = "red", linetype = 2)
+#
+#ggsave(pp1 + xlab("Estimate"), file = "int_conf.pdf")
 ```
 
 

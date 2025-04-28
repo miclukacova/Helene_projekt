@@ -12,6 +12,7 @@ library(survival)
 #install.packages("rtmle")
 #devtools::install_github("tagteam/rtmle")
 library(rtmle)
+library(simevent)
 library(ggplot2)
 library(microbenchmark)
 theme_set(theme_bw())
@@ -22,134 +23,218 @@ theme_set(theme_bw())
 
 ```{r}
 profvis::profvis({
-sim_event_data <- function(N,                      # Number of individuals
-                           beta = NULL,            # Effects
-                           eta = rep(0.1,4),       # Shape parameters
-                           nu = rep(1.1,4),        # Scale parameters
-                           at_risk = NULL,         # Function defining the setting
-                           term_deltas = c(0,1),    # Terminal events
-                           max_cens = Inf,
-                           sex = FALSE
-                           )
-  {
+simEventData2 <- function(N,                     # Number of individuals
+                         beta = NULL,            # Effects
+                         eta = NULL,             # Shape parameters
+                         nu = NULL,              # Scale parameters
+                         at_risk = NULL,         # Function defining the setting
+                         term_deltas = c(0,1),   # Terminal events
+                         max_cens = Inf,         # Followup time
+                         add_cov = NULL,         # Additional baseline covariates
+                         override_beta = NULL,   # Override beta
+                         max_events = 10,        # Maximal events per individual
+                         lower = 10^(-15),       # Lower bound for ICH
+                         upper = 200,            # Upper bound for ICH
+                         gen_A0 = NULL           # Generation of A0
+){
   ID <- NULL
-  if(is.null(beta)){
-    beta <- matrix(0, nrow = 4, ncol = 4)
-  }
-  if(!sex){
-    beta <- rbind(beta, rep(0,4))
+
+  ############################ Check and useful quantities #####################
+  # Check of add_cov
+  if(!(is.null(add_cov) | is.list(add_cov))){
+    stop("add_cov needs to be list of random functions")
   }
 
+  # Number of additional baseline covariates
+  num_add_cov <- length(add_cov)
 
+  # Determine number of events
+  num_events <- if (!is.null(eta)) length(eta) else
+    if (!is.null(nu)) length(nu) else
+      if (!is.null(beta)) ncol(beta) else 4
+
+  # Useful indices
+  N_start <- 3 + num_add_cov
+  N_stop <- 2 + num_add_cov + num_events
+
+  ############################ Default values ##################################
+
+  # Set default values for beta, eta, and nu
+  beta <- if (!is.null(beta)) beta else matrix(0, nrow = N_stop, ncol = num_events)
+  colnames(beta) <- paste0("N", seq(0, num_events -1))
+
+  if((N_stop) != nrow(beta)){
+    stop("Number of rows in beta should equal the sum of number of event and
+         number of additional covariates + 2")
+  }
+
+  eta  <- if (!is.null(eta)) eta   else rep(0.1, num_events)
+  nu   <- if (!is.null(nu)) nu     else rep(1.1, num_events)
+
+  # Check of dimensions
+  if(num_events != length(nu) || num_events != ncol(beta)){
+    stop("Length of eta should be equal to nu and number of columns of beta")
+  }
+
+  # Default at_risk
   if(is.null(at_risk)){
-    at_risk <- function(i, L, A) {
-      return(c(
-        1,1, # If you have not died or been censored yet, you are at risk for dying or being censored
-        as.numeric(A[i] == 0), # You are only at risk for an operation if you have not had an operation yet
-        as.numeric(L[i] == 0))) # You are only at risk for a change in the covariate process if you have not had a change yet
-  }}
+    riskss <- rep(1, num_events)
+    at_risk <- function(events) return(riskss)
+  }
+  # Default A0 generation
+  if(is.null(gen_A0)){
+    gen_A0 <- function(N, L0) stats::rbinom(N, 1, 0.5)
+  }
 
-  # Events
-  x <- 1:ncol(beta)
+  # Matrix for storing values
+  simmatrix <- matrix(0, nrow = N, ncol = (2 + num_events + num_add_cov))
+
+  # Generate additional covariates if distributions are specified
+  if (num_add_cov != 0) {
+    simmatrix[,3:(2+length(add_cov))] <- sapply(add_cov, function(f) f(N))
+  }
+
+  # Naming of matrices
+  if (is.null(names(add_cov)) && num_add_cov != 0) {
+    colnames(simmatrix) <- c("L0", "A0", paste0("L", seq_len(num_add_cov)), colnames(beta))
+  } else {
+    colnames(simmatrix) <- c("L0", "A0", names(add_cov), colnames(beta))
+  }
+
+  rownames(beta) <- colnames(simmatrix)
+
+  # Filing out beta matrix
+  if(!is.null(override_beta)){
+    for (bb in 1:length(override_beta)) {
+      if (names(override_beta)[bb] %in% rownames(beta)) {
+        beta[bb, names(override_beta[[bb]])] <- override_beta[[bb]]
+      } else {
+        beta <- rbind(beta, matrix(0, nrow = 1, ncol = ncol(beta)))
+        beta[nrow(beta), names(override_beta[[bb]])] <- override_beta[[bb]]
+        rownames(beta)[nrow(beta)] <- names(override_beta)[bb]
+      }
+    }
+  }
+
+  ############################ Functions #######################################
+
+  # Proportional hazard
+  if(nrow(beta) == N_stop){
+    calculate_phi <- function(simmatrix) {
+      exp(simmatrix %*% beta)
+    }
+  } else {
+    calculate_phi <- function(simmatrix) {
+      obj <- as.data.frame(simmatrix)
+      X <- sapply(rownames(beta), function(expr) {
+        eval(parse(text = expr), envir = obj)
+      })
+      effects <- as.matrix(X) %*% beta
+      return(exp(effects))
+    }
+  }
 
   # Intensities
-  phi <- function(i) {
-    exp(L0[i] / 50 * beta[1,] + A0[i] * beta[2,] + L[i] * beta[3,] + A[i] * beta[4,] + L1[i] * beta[5,])
-  }
-
   lambda <- function(t, i) {
-    at_risk(i, L, A) * eta * nu * t ^ (nu - 1) * phi(i)
+    risk_vec <- at_risk(simmatrix[i, N_start:N_stop])
+    risk_vec * eta * nu * t^(nu - 1) * phi[i,]
   }
 
-  # If all events have same parameter, the inverse simplifies
-  if(all(nu[1] == nu)){
-    inverse_sc_haz <- function(u, t, i) {
-      denom <- sum(at_risk(i, L, A) * eta * phi(i))
-      (u / denom + t^nu[1])^(1 / nu[1]) - t
+  # If all events have the same parameter, the inverse of the cumulative hazard simplifies
+  if(all(nu[1] == nu) && all(eta[1] == eta)){
+    inverse_sc_haz <- function(p, t, i) {
+      denom <- sum(at_risk(simmatrix[i, N_start:N_stop]) * eta * phi[i,])
+      (p / denom + t^nu[1])^(1 / nu[1]) - t
     }
+  # Otherwise we use a numerical inverse coded in rcpp
   } else{
     # Summed cumulative hazard
     sum_cum_haz <- function(u, t, i) {
-      sum(at_risk(i, L, A) * eta * phi(i) * ((t + u) ^ nu - t ^ nu))
-    }
-
+      sum(at_risk(simmatrix[i, N_start:N_stop]) * eta * phi[i,] * ((t + u) ^ nu - t ^ nu))
+      }
+    
     # Inverse summed cumulative hazard function
-    inverse_sc_haz <- function(p, t, i, lower_bound = 10^-15, upper_bound = 200) {
+    inverse_sc_haz <- function(p, t, i) {
       root_function <- function(u) sum_cum_haz(u, t, i) - p
-      stats::uniroot(root_function, lower = lower_bound, upper = upper_bound)$root
+      stats::uniroot(root_function, lower = lower, upper = upper)$root
     }
   }
 
   # Event probabilities
   probs <- function(t, i){
-    if(t > max_cens){
-      probs <- c(1,0,0,0)
-    }
-    else{
-      probs <- lambda(t, i)
-      summ <- sum(probs)
-      probs / summ
-    }
+    if(t == max_cens) return(c(1, rep(0, (num_events - 1))))
+    probs <- lambda(t, i)
+    summ <- sum(probs)
+    probs / summ
   }
 
-  # Draw
-  L0 <- stats::runif(N, 40, 60)
-  L1 <- stats::rbinom(N, 1, 0.5)
-  A0 <- stats::rbinom(N, 1, 0.5)
+  ############################ Initializing Simulations ########################
+
+  # Draw baseline covariates
+  simmatrix[,1] <- stats::runif(N)                   # L0
+  simmatrix[,2] <- gen_A0(N, simmatrix[,1])          # A0
 
   # Initialize
-  T_k <- rep(0,N)
-  Delta <- -1
-  L <- rep(0, N)
-  A <- rep(0, N)
-  alive <- 1:N
+  T_k <- rep(0,N)                                    # Time 0
+  alive <- 1:N                                       # Keeping track of who is alive
+  res_list <- vector("list", max_events)             # For results
+  idx <- 1                                           # Index
 
-  res <- data.table()
+
+  ############################ Simulations #####################################
 
   while(length(alive) != 0){
     # Simulate time
-    V <- stats::runif(N)
-    W <- sapply(alive, function(i) inverse_sc_haz(-log(V)[i], T_k[i], i))
+    V <- -log(stats::runif(N))
+    phi <- calculate_phi(simmatrix)
+    W <- sapply(alive, function(i) inverse_sc_haz(V[i], T_k[i], i))
     T_k[alive] <- T_k[alive] + W
 
+    # Maximal censoring time
+    T_k[T_k > max_cens] <- max_cens
+
     # Simulate event
-    Deltas <- sapply(alive, function(i) sample(x, size = 1, prob = probs(T_k[i], i)) - 1)
+    probs_mat <- sapply(alive, function(i) probs(T_k[i], i), simplify = "array")
+    Deltas <- sampleEvents(probs_mat)
 
+    # Update event counts
+    simmatrix[cbind(alive, 2 + num_add_cov + Deltas + 1)] <-
+      simmatrix[cbind(alive, 2 + num_add_cov + Deltas + 1)] + 1
+
+    # Store data
     kth_event <- data.table(ID = alive,
-               Time = T_k[alive],
-               Delta = Deltas,
-               L0 = L0[alive],
-               L1 = L1[alive],
-               L = L[alive],
-               A0 = A0[alive],
-               A = A[alive])
+                            Time = T_k[alive],
+                            Delta = Deltas)
 
-    res <- rbind(res, kth_event)
-
-    # Update treatment process and covariate change indicators
-    A[alive][Deltas == 2] <- 1
-    L[alive][Deltas == 3] <- 1
+    res_list[[idx]] <- cbind(kth_event, data.table::as.data.table(simmatrix[alive, , drop = FALSE]))
+    idx <- idx + 1
 
     # Who is still alive and uncensored?
-    alive <- alive[! Deltas %in% term_deltas]
+    alive <- alive[!Deltas %in% term_deltas]
   }
 
+  res <- data.table::rbindlist(res_list)
   setkey(res, ID)
-  if(!sex) res[,L1:= NULL]
 
   return(res)
 }
 
-  sim_event_data(N = 5000)
+  #simEventData2(N = 10000)
+  simEventData2(N = 10^4, eta = c(0.1,0.1,0.2,0.1))
+  #simEventData2(N = 5000, override_beta = list("N2>=1" = c("N1" = 1.2)))
 })
+```
 
+Matrix multiplikationen, den inverse 
 
+```{r}
 my_bench <- bench::press(
-  N = 2^(4:10),
+  N = seq(1000, 3000, by = 500),
   {
     bench::mark(
-      "sim_event_data" = sim_event_data(N = N),
-      "sim_event_data old" = sim_event_data(N = N, nu = c(1.1,1.11,1.1,1.1)),
+      "simEventData" = simEventData(N = N, eta = c(0.1,0.1,0.2,0.1)),
+      "simEventData2" = simEventData2(N = N, eta = c(0.1,0.1,0.2,0.1)),
+      #"simEventData3" = simEventData3(N = N, override_beta = list("N2>=1" = c("N1" = 1.2))),
       check = FALSE
     )
   }
@@ -163,6 +248,28 @@ my_bench |>
 ```
 
 
+```{r}
+simmatrix <- matrix(0, nrow = N, ncol = (2 + 3 + 4))
+beta <- matrix(0, nrow = 9, ncol = 3)
+
+
+library(microbenchmark)
+microbenchmark(
+  twoStep = {
+    effects <- simmatrix %*% beta
+    exp(effects)},
+  allInOne = {
+    exp(simmatrix %*% beta)
+  },
+  times = 100
+)
+
+my_bench |>
+  dplyr::mutate(expr = as.character(expression), median = as.numeric(median)) |> 
+  ggplot(aes(N, median, color = expr)) + geom_point() + 
+  #scale_y_log10() +
+  geom_line() + labs(y = "time (ms)")
+```
 
 
 
