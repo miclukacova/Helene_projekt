@@ -63,24 +63,24 @@ A little test
 Estimates quite well. 
 
 ```{r}
-#true_cumhaz_death <- function(t) 0.1  * t^(1.1) * exp(1 * 0.687565 + 0 * (-1) + 0 * 1)
+#true_cumint_death <- function(t) 0.1  * t^(1.1) * exp(1 * 0.687565 + 0 * (-1) + 0 * 1)
 #ggplot()+
-#  geom_line(aes(x = cumhaz_death$time, y = cumhaz_death[,1]))+
-#  geom_function(fun = true_cumhaz_death, color = "red")
+#  geom_line(aes(x = cumint_death$time, y = cumint_death[,1]))+
+#  geom_function(fun = true_cumint_death, color = "red")
 #
-#true_cumhaz_t2d <- function(t) 0.1  * t^(1.1) * exp(1 * 0.687565)
+#true_cumint_t2d <- function(t) 0.1  * t^(1.1) * exp(1 * 0.687565)
 #ggplot()+
-#  geom_line(aes(x = cumhaz_t2d$time, y = cumhaz_t2d[,1]))+
-#  geom_function(fun = true_cumhaz_t2d, color = "red")
+#  geom_line(aes(x = cumint_t2d$time, y = cumint_t2d[,1]))+
+#  geom_function(fun = true_cumint_t2d, color = "red")
 #
 ```
 
 
 ## New data
 
-In order to simulate new data from an observed data set, we start out by initializing $N$ observations. We draw the $A_0$ covariate from a Bernoulli with probability $0.5$  and the $L_0$ we sample from the empirical distribution. We initialize the $T_0$ as $0$ and the cumulative hazard at this time as $0$. 
+In order to simulate new data from an observed data set, we start out by initializing $N$ observations. We draw the $A_0$ covariate from a Bernoulli with probability $0.5$  and the $L_0$ we sample from the empirical distribution. We initialize the $T_0$ as $0$ and the cumulative intensity at this time as $0$. 
 
-Then as long as we have individuals that are alive, we for each individual find the cumulative hazard functions of death and T2D. In order to simulate the next event time $T_k = T_{k-1} + W_k$ we need to find the waiting time $W_k$. We find this time by finding the waiting time of each event and taking the minimum, in this case, the waiting time of the death event $W_k^{death}$ and the waiting time of the T2D event $W_k^{T2D}$. $W_k^x$ is distributed with cumulative intensity
+Then as long as we have individuals that are alive, we for each individual find the cumulative intensity functions of death and T2D. In order to simulate the next event time $T_k = T_{k-1} + W_k$ we need to find the waiting time $W_k$. We find this time by finding the waiting time of each event and taking the minimum, in this case, the waiting time of the death event $W_k^{death}$ and the waiting time of the T2D event $W_k^{T2D}$. $W_k^x$ is distributed with cumulative intensity
 $$ \tilde{\Lambda}^x(u|T_{k-1} = t) = \Lambda^x(u + t ) - \Lambda^x(t)$$
 We then have that
 $$(\tilde{\Lambda}^x)^{-1}(-\log(U)) \sim \tilde{\Lambda}^x(u)$$
@@ -94,7 +94,7 @@ max_events <- 2
 # Initialize
 N <- 1000
 alive <- 1:N
-T_k <- lambda_T_k_death <- lambda_T_k_t2d <- death_times <- t2d_times <- rep(0, N)
+T_k <- lambda_T_k_death <- lambda_T_k_t2d <- rep(0, N)
 sim_data <- data.frame(
   L0 = sample(data$L0, N, replace = TRUE),  # sample med replacement fra gammel data
   A0 = rbinom(N, 1, 0.5),
@@ -105,41 +105,41 @@ sim_data <- data.frame(
 res_list <- vector("list", max_events)             # For results
 idx <- 1                                           # Index
 
-# Function to find the cumulative hazard 
-cum_haz <- function(hazz_vals, time_vals, t) {
-  # We find all the cumulative hazard values corresponding to times smaller than t
-  cum_haz_t <- hazz_vals[time_vals <= t]
+# Function to find the cumulative intensity 
+cum_int <- function(int_vals, time_vals, t) {
+  # We find all the cumulative intensity values corresponding to times smaller than t
+  cum_int_t <- int_vals[time_vals <= t]
   # We take the maximal of these, or if there are none return 0
-  ifelse(length(cum_haz_t) == 0, 0, max(cum_haz_t))
+  ifelse(length(cum_int_t) == 0, 0, max(cum_int_t))
 }
 
-# Function to find the inverse cumulative hazard
-inv_cum_haz <- function(hazz_vals, time_vals, p) {
-  # We find the time corresponding to the hazard values larger than p
-  T_k_1 <- time_vals[hazz_vals >= p]
-  # We find the inverse cumulative hazard
+# Function to find the inverse cumulative intensity
+inv_cum_int <- function(int_vals, time_vals, p) {
+  # We find the time corresponding to the intensity values larger than p
+  T_k_1 <- time_vals[int_vals >= p]
+  # We find the inverse cumulative intensity
   ifelse(length(T_k_1) == 0, max(time_vals), min(T_k_1))
 }
 
 while(length(alive) != 0){
-  # Fit the cumulative hazard
-  cumhaz_death <- basehaz(survfit_death, sim_data)
-  cumhaz_t2d <- basehaz(survfit_t2d, sim_data)        
+  # Fit the cumulative intensities
+  cumInt_death <- basehaz(survfit_death, sim_data)
+  cumInt_t2d <- basehaz(survfit_t2d, sim_data)        
   
-  # Jump times of the cumulative hazard
-  time_death <- cumhaz_death$time
-  time_t2d <- cumhaz_t2d$time
+  # Jump times of the cumulative intensities
+  time_death <- cumInt_death$time
+  time_t2d <- cumInt_t2d$time
   
-  # We find the cumulative hazard at the event time
-  lambda_T_k_death <- sapply(1:N, function(i) cum_haz(cumhaz_death[,i], time_death, death_times[i]))
-  lambda_T_k_t2d <- sapply(1:N, function(i) cum_haz(cumhaz_t2d[,i], time_t2d, t2d_times[i]))
+  # We find the cumulative intensity at the event time
+  lambda_T_k_death <- sapply(1:N, function(i) cum_int(cumInt_death[,i], time_death, T_k[i]))
+  lambda_T_k_t2d <- sapply(1:N, function(i) cum_int(cumInt_t2d[,i], time_t2d, T_k[i]))
   
-  # Finding the inter event times with the inverse cumulative hazard of the waiting times
+  # Finding the inter event times with the inverse cumulative intensity of the waiting times
   U <- -log(runif(N))
   V_death <- U + lambda_T_k_death
   V_t2d <- U + lambda_T_k_t2d
-  death_times  <- sapply(alive, function(i) inv_cum_haz(cumhaz_death[,i], time_death, V_death[i])) 
-  t2d_times  <-  sapply(alive, function(i) inv_cum_haz(cumhaz_t2d[,i], time_t2d, V_t2d[i]))
+  death_times  <- sapply(alive, function(i) inv_cum_int(cumInt_death[,i], time_death, V_death[i])) 
+  t2d_times  <-  sapply(alive, function(i) inv_cum_int(cumInt_t2d[,i], time_t2d, V_t2d[i]))
   
   # You can only experience T2D once
   t2d_times[sim_data[alive,"L"]>0] <- Inf
@@ -192,5 +192,94 @@ ggplot()+
   geom_function(fun = true_surv_t2d_func)
 ```
 Not really working
+
+## Making a function
+
+!!! DOES NOT WORK YET !!!
+
+```{r}
+L0_old <- data$L0
+cox_fits <- list("death" = survfit_death, "t2d" = survfit_t2d)
+N <- 100
+simEventDataCox <- function(N, cox_fits, L0_old, max_events = 3) {
+  
+  # Number of events
+  num_events <- length(cox_fits)
+  
+  # Initialize
+  alive <- 1:N
+  T_k <- rep(0, N)
+  cum_int_Tk <- matrix(0, ncol = num_events, nrow = N)    # The cumulative intensity at Time 0 is 0
+  event_times <- matrix(ncol = num_events, nrow = N)      # A matrix for event times
+
+  sim_data <- data.frame(
+    L0 = sample(L0_old, N, replace = TRUE),  # sample with replacement from old data
+    A0 = rbinom(N, 1, 0.5),
+    L = 0
+  )
+  
+  # List for results
+  res_list <- vector("list", max_events)             # For results
+  idx <- 1                                           # Index
+  
+  # Function to find the cumulative intensity 
+  cum_int <- function(int_vals, time_vals, t) {
+    cum_int_t <- int_vals[time_vals <= t]                 # All the cum. int. values corresponding to times smaller than t
+    ifelse(length(cum_int_t) == 0, 0, max(cum_int_t))     # We take the maximal of these, or if there are none return 0
+  }
+  
+  # Function to find the inverse cumulative intensity
+  inv_cum_int <- function(int_vals, time_vals, p) {
+    T_k_1 <- time_vals[int_vals >= p,]                      # We find the time corresponding to the intensity values > p
+    ifelse(length(T_k_1) == 0, max(time_vals), min(T_k_1))  # We find the inverse cumulative intensity
+  }
+  
+  while(length(alive) != 0){
+    # Fit the cumulative intensities
+    cumInt_list <- lapply(cox_fits, function(model) basehaz(model, sim_data))
+    
+    # Jump times of the cumulative intensities
+    jump_times <- lapply(cumInt_list, function(matrix) matrix['time'])
+    
+    # We find the cumulative intensity of event j and individual i at the event time T_k
+    for(j in 1:num_events){
+      cum_int_Tk[,j] <- sapply(1:N, function(i) cum_int(cumInt_list[[j]][,i], jump_times[[j]], T_k[i]))
+    }
+  
+    # Simulate the uniform random variable
+    U <- -log(runif(N))
+    V <- apply(cum_int_Tk, 2, function(cumInt) cumInt + U)
+    for(j in 1:num_events){
+      event_times[alive,j] <- sapply(alive, function(i) inv_cum_int(cumInt_list[[j]][,i], jump_times[[j]], V[i,j]))
+    }
+    
+    # You can only experience event 2 once
+    event_times[sim_data[alive, 'L'] > 0, 2] <- Inf
+    
+    # The next event is the minimum of these events
+    T_k <- apply(event_times, 1, min)
+    Deltas <- 1 + as.numeric(event_times[,2] == T_k)
+    
+    # Update event counts
+    sim_data[alive, 3] <- sim_data[alive, 3] + as.numeric(Deltas == 2)
+    
+    # Store data
+    kth_event <- data.table(ID = alive,
+                            Time = T_k,
+                            Delta = Deltas)
+  
+    res_list[[idx]] <- cbind(kth_event, data.table::as.data.table(sim_data[alive, , drop = FALSE]))
+    idx <- idx + 1
+    
+    # Who is still alive?
+    alive <- alive[Deltas != 1]
+  }
+  
+  res <- data.table::rbindlist(res_list)
+  setkey(res, ID)
+}
+
+simEventDataCox(N, cox_fits, L0_old)
+```
 
 
