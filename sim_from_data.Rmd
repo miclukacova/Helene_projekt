@@ -38,17 +38,17 @@ We fit the models
 data_int <- IntFormatData(data, N_cols = 6)
 
 # Fit Cox models
-survfit_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0 + A0 + L, data = data_int)
-survfit_t2d <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A0, data = data_int[L == 0])
+cox_death <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0 + A0 + L, data = data_int)
+cox_t2d <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A0, data = data_int[L == 0])
 ```
 
 A little test
 
 ```{r}
-#newdata <- data.frame("A0" = 0, "L0" = 0.5, "L" = 0)
-#surv_death <- survfit(survfit_death, newdata = newdata, method = "breslow")
+predict_data <- data.frame("A0" = 0, "L0" = 0.5, "L" = 0)
+#surv_death <- survfit(cox_death, newdata = predict_data, method = "breslow")
 #true_surv_death_func <- function(t) exp( - 0.1  * t^(1.1) * exp(1 * 0.5 + 0 * (-1) + 0 * 1))
-#surv_t2d <- survfit(survfit_t2d, newdata = newdata, method = "breslow")
+#surv_t2d <- survfit(cox_t2d, newdata = predict_data, method = "breslow")
 #true_surv_t2d_func <- function(t) exp( - 0.1  * t^(1.1) * exp(1 * 0.5))
 #
 #ggplot(data = data.frame(x = surv_death$time, y = surv_death$surv))+
@@ -76,7 +76,7 @@ Estimates quite well.
 ```
 
 
-## New data
+## Simulation function
 
 In order to simulate new data from an observed data set, we start out by initializing $N$ observations. We draw the $A_0$ covariate from a Bernoulli with probability $0.5$  and the $L_0$ we sample from the empirical distribution. We initialize the $T_0$ as $0$ and the cumulative intensity at this time as $0$. 
 
@@ -88,127 +88,18 @@ Where $U$ is a uniform random variable. The inverse cumulative intensity of the 
 $$(\tilde{\Lambda}^x)^{-1}(u |T_{k-1} = t, \mathcal{F}_{(u+t)-}) = \Lambda^{-1}_x(-\log u + \Lambda(t|F_{t-})|\mathcal{F}_{(u+t)-}) - t$$
 So in order to simulate event specific waiting times, we draw uniform random variables take the minus log and of this number take the inverse cumulative intensity and subtract $t$. 
 
-```{r}
-max_events <- 2
-
-# Initialize
-N <- 1000
-alive <- 1:N
-T_k <- lambda_T_k_death <- lambda_T_k_t2d <- rep(0, N)
-sim_data <- data.frame(
-  L0 = sample(data$L0, N, replace = TRUE),  # sample med replacement fra gammel data
-  A0 = rbinom(N, 1, 0.5),
-  L = 0
-)
-
-# List for results
-res_list <- vector("list", max_events)             # For results
-idx <- 1                                           # Index
-
-# Function to find the cumulative intensity 
-cum_int <- function(int_vals, time_vals, t) {
-  # We find all the cumulative intensity values corresponding to times smaller than t
-  cum_int_t <- int_vals[time_vals <= t]
-  # We take the maximal of these, or if there are none return 0
-  ifelse(length(cum_int_t) == 0, 0, max(cum_int_t))
-}
-
-# Function to find the inverse cumulative intensity
-inv_cum_int <- function(int_vals, time_vals, p) {
-  # We find the time corresponding to the intensity values larger than p
-  T_k_1 <- time_vals[int_vals >= p]
-  # We find the inverse cumulative intensity
-  ifelse(length(T_k_1) == 0, max(time_vals), min(T_k_1))
-}
-
-while(length(alive) != 0){
-  # Fit the cumulative intensities
-  cumInt_death <- basehaz(survfit_death, sim_data)
-  cumInt_t2d <- basehaz(survfit_t2d, sim_data)        
-  
-  # Jump times of the cumulative intensities
-  time_death <- cumInt_death$time
-  time_t2d <- cumInt_t2d$time
-  
-  # We find the cumulative intensity at the event time
-  lambda_T_k_death <- sapply(1:N, function(i) cum_int(cumInt_death[,i], time_death, T_k[i]))
-  lambda_T_k_t2d <- sapply(1:N, function(i) cum_int(cumInt_t2d[,i], time_t2d, T_k[i]))
-  
-  # Finding the inter event times with the inverse cumulative intensity of the waiting times
-  U <- -log(runif(N))
-  V_death <- U + lambda_T_k_death
-  V_t2d <- U + lambda_T_k_t2d
-  death_times  <- sapply(alive, function(i) inv_cum_int(cumInt_death[,i], time_death, V_death[i])) 
-  t2d_times  <-  sapply(alive, function(i) inv_cum_int(cumInt_t2d[,i], time_t2d, V_t2d[i]))
-  
-  # You can only experience T2D once
-  t2d_times[sim_data[alive,"L"]>0] <- Inf
-  
-  # The next event is the minimum of these events
-  T_k <- pmin(t2d_times, death_times)
-  Deltas <- 1 + as.numeric(t2d_times == T_k)
-  
-  # Update event counts
-  sim_data[alive, 3] <- sim_data[alive, 3] + as.numeric(Deltas == 2)
-  
-  # Store data
-  kth_event <- data.table(ID = alive,
-                          Time = T_k,
-                          Delta = Deltas)
-
-  res_list[[idx]] <- cbind(kth_event, data.table::as.data.table(sim_data[alive, , drop = FALSE]))
-  idx <- idx + 1
-  
-  # Who is still alive?
-  alive <- alive[Deltas != 1]
-}
-
-res <- data.table::rbindlist(res_list)
-setkey(res, ID)
-```
-
-
-## check whether simulated data has the desired intensitities...
+The simulation procedure is implemented in the function `simEventDataCox` below. 
 
 ```{r}
-# Transform data into tstart tstop format
-data_int2 <- IntFormatData(res, N_cols = 6)
-
-# Fit Cox models
-survfit_death2 <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0 + A0 + L, data = data_int2)
-survfit_t2d2 <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A0, data = data_int2[L == 0])
-
-surv_death2 <- survfit(survfit_death2, newdata = newdata, method = "breslow")
-surv_t2d2 <- survfit(survfit_t2d2, newdata = newdata, method = "breslow")
-
-ggplot()+
-  geom_line(aes(x = surv_death$time, y = surv_death$surv), color = "red") +
-  geom_line(aes(x = surv_death2$time, y = surv_death2$surv), color = "blue") +
-  geom_function(fun = true_surv_death_func)
-
-ggplot()+
-  geom_line(aes(x = surv_t2d$time, y = surv_t2d$surv), color = "red") +
-  geom_line(aes(x = surv_t2d2$time, y = surv_t2d2$surv), color = "blue") +
-  geom_function(fun = true_surv_t2d_func)
-```
-Not really working
-
-## Making a function
-
-!!! DOES NOT WORK YET !!!
-
-```{r}
-L0_old <- data$L0
-cox_fits <- list("death" = survfit_death, "t2d" = survfit_t2d)
-N <- 100
 simEventDataCox <- function(N, cox_fits, L0_old, max_events = 3) {
   
   # Number of events
   num_events <- length(cox_fits)
   
   # Initialize
-  alive <- 1:N
-  T_k <- rep(0, N)
+  alive <- 1:N                                            # Vector for keeping track of who is alive
+  num_alive <- N                                          # Number of alive individuals
+  T_k <- rep(0, N)                                        # Last event time
   cum_int_Tk <- matrix(0, ncol = num_events, nrow = N)    # The cumulative intensity at Time 0 is 0
   event_times <- matrix(ncol = num_events, nrow = N)      # A matrix for event times
 
@@ -224,8 +115,8 @@ simEventDataCox <- function(N, cox_fits, L0_old, max_events = 3) {
   
   # Function to find the cumulative intensity 
   cum_int <- function(int_vals, time_vals, t) {
-    cum_int_t <- int_vals[time_vals <= t]                 # All the cum. int. values corresponding to times smaller than t
-    ifelse(length(cum_int_t) == 0, 0, max(cum_int_t))     # We take the maximal of these, or if there are none return 0
+    cum_int_t <- int_vals[time_vals <= t]                 # All the cum.int. values at times smaller than t
+    ifelse(length(cum_int_t) == 0, 0, max(cum_int_t))     # We take the max of these, or if there are none return 0
   }
   
   # Function to find the inverse cumulative intensity
@@ -236,21 +127,21 @@ simEventDataCox <- function(N, cox_fits, L0_old, max_events = 3) {
   
   while(length(alive) != 0){
     # Fit the cumulative intensities
-    cumInt_list <- lapply(cox_fits, function(model) basehaz(model, sim_data))
+    cumInt_list <- lapply(cox_fits, function(model) basehaz(model, sim_data[alive,]))
     
     # Jump times of the cumulative intensities
     jump_times <- lapply(cumInt_list, function(matrix) matrix['time'])
     
     # We find the cumulative intensity of event j and individual i at the event time T_k
     for(j in 1:num_events){
-      cum_int_Tk[,j] <- sapply(1:N, function(i) cum_int(cumInt_list[[j]][,i], jump_times[[j]], T_k[i]))
+      cum_int_Tk[,j] <- sapply(1:num_alive, function(i) cum_int(cumInt_list[[j]][,i], jump_times[[j]], T_k[i]))
     }
   
     # Simulate the uniform random variable
-    U <- -log(runif(N))
+    U <- -log(runif(num_alive))
     V <- apply(cum_int_Tk, 2, function(cumInt) cumInt + U)
     for(j in 1:num_events){
-      event_times[alive,j] <- sapply(alive, function(i) inv_cum_int(cumInt_list[[j]][,i], jump_times[[j]], V[i,j]))
+      event_times[,j] <- sapply(1:num_alive, function(i) inv_cum_int(cumInt_list[[j]][,i], jump_times[[j]], V[i,j]))
     }
     
     # You can only experience event 2 once
@@ -273,13 +164,50 @@ simEventDataCox <- function(N, cox_fits, L0_old, max_events = 3) {
     
     # Who is still alive?
     alive <- alive[Deltas != 1]
+    num_alive <- length(alive)
+    # For the next iteration we only keep data from individuals alive
+    T_k <- T_k[alive]                           
+    cum_int_Tk <- cum_int_Tk[alive,]
+    event_times <- event_times[alive,]
   }
   
   res <- data.table::rbindlist(res_list)
   setkey(res, ID)
+  return(res)
 }
-
-simEventDataCox(N, cox_fits, L0_old)
 ```
+
+## Simulate new data
+
+```{r}
+cox_fits <- list(death = cox_death, t2d = cox_t2d)
+new_data <- simEventDataCox(1000, cox_fits, L0_old = data$L0)
+```
+
+
+## check whether simulated data has the desired intensitities...
+
+```{r}
+# Transform data into tstart tstop format
+data_int2 <- IntFormatData(new_data, N_cols = 6)
+
+# Fit Cox models
+cox_death2 <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0 + A0 + L, data = data_int2)
+cox_t2d2 <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A0, data = data_int2[L == 0])
+
+surv_death2 <- survfit(cox_death2, newdata = predict_data, method = "breslow")
+surv_t2d2 <- survfit(cox_t2d2, newdata = predict_data, method = "breslow")
+
+ggplot()+
+  geom_line(aes(x = surv_death$time, y = surv_death$surv), color = "red") +
+  geom_line(aes(x = surv_death2$time, y = surv_death2$surv), color = "blue") +
+  geom_function(fun = true_surv_death_func)
+
+ggplot()+
+  geom_line(aes(x = surv_t2d$time, y = surv_t2d$surv), color = "red") +
+  geom_line(aes(x = surv_t2d2$time, y = surv_t2d2$surv), color = "blue") +
+  geom_function(fun = true_surv_t2d_func)
+```
+Not really working
 
 
