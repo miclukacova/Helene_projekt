@@ -26,7 +26,7 @@ theme_set(theme_bw())
 
 ```{r}
 set.seed(373)
-data <- simEventData(5000)
+data <- simT2D(N = 5000, beta_A0_L = -1)
 ```
 
 ## Estimation
@@ -45,36 +45,28 @@ cox_t2d <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A0, data = data_int[L ==
 A little test
 
 ```{r}
-predict_data <- data.frame("A0" = 0, "L0" = 0.5, "L" = 0)
-#surv_death <- survfit(cox_death, newdata = predict_data, method = "breslow")
-#true_surv_death_func <- function(t) exp( - 0.1  * t^(1.1) * exp(1 * 0.5 + 0 * (-1) + 0 * 1))
-#surv_t2d <- survfit(cox_t2d, newdata = predict_data, method = "breslow")
-#true_surv_t2d_func <- function(t) exp( - 0.1  * t^(1.1) * exp(1 * 0.5))
-#
-#ggplot(data = data.frame(x = surv_death$time, y = surv_death$surv))+
-#  geom_line(aes(x = x, y = y), color = "red") +
-#  geom_function(fun = true_surv_death_func)
-#
-#ggplot(data = data.frame(x = surv_t2d$time, y = surv_t2d$surv))+
-#  geom_line(aes(x = x, y = y), color = "red") +
-#  geom_function(fun = true_surv_t2d_func)
+predict_data <- data.frame("A0" = c(1,1), "L0" = c(0.5, 0.5), "L" = c(0,1))
+
+hazzest_t2d <- basehaz(cox_t2d, predict_data, centered = TRUE)
+hazzest_death <- basehaz(cox_death, predict_data)
+true_surv_death_func1 <- function(t) exp( - 0.1  * t^(1.1) * exp(1 * 0.5 + 0 * (-1) + 0 * 1))
+true_surv_death_func2 <- function(t) exp( - 0.1  * t^(1.1) * exp(1 * 0.5 + 0 * (-1) + 1 * 1))
+true_surv_t2d_func <- function(t) exp( - 0.1  * t^(1.1) * exp(1 * 0.5 + -1 * 1))
+
+gridExtra::grid.arrange(
+  ggplot(data = data.frame(x = hazzest_death$time, y = exp(-hazzest_death[,1])))+
+    geom_line(aes(x = x, y = y), color = "red") +
+    geom_function(fun = true_surv_death_func1),
+  ggplot(data = data.frame(x = hazzest_death$time, y = exp(-hazzest_death[,2])))+
+    geom_line(aes(x = x, y = y), color = "red") +
+    geom_function(fun = true_surv_death_func2),
+  ggplot(data = data.frame(x = hazzest_t2d$time, y = exp(-hazzest_t2d[,1])))+
+    geom_line(aes(x = x, y = y), color = "red") +
+    geom_function(fun = true_surv_t2d_func),
+  nrow = 2)
 ```
 
 Estimates quite well. 
-
-```{r}
-#true_cumint_death <- function(t) 0.1  * t^(1.1) * exp(1 * 0.687565 + 0 * (-1) + 0 * 1)
-#ggplot()+
-#  geom_line(aes(x = cumint_death$time, y = cumint_death[,1]))+
-#  geom_function(fun = true_cumint_death, color = "red")
-#
-#true_cumint_t2d <- function(t) 0.1  * t^(1.1) * exp(1 * 0.687565)
-#ggplot()+
-#  geom_line(aes(x = cumint_t2d$time, y = cumint_t2d[,1]))+
-#  geom_function(fun = true_cumint_t2d, color = "red")
-#
-```
-
 
 ## Simulation function
 
