@@ -158,11 +158,15 @@ simEventDataCox <- function(N,
     
     # Checking whether the true inverse cumulative intensity corresponds to the one we calculate
     # It does!!!!!!!!!
-    inv_cum_int_true <- matrix(ncol = num_events, nrow = num_alive)
-    for(j in 1:num_events){
-      inv_cum_int_true[,j] <- sapply(1:num_alive, function(i) true_inv_cum_int(V[i,j]))
-    }
+    #browser()
+    #inv_cum_int_true <- matrix(ncol = num_events, nrow = num_alive)
+    #true_inv_cum_int <- function(y) (y/0.1)^(1/1.1)
+    #for(j in 1:num_events){
+    #  inv_cum_int_true[,j] <- sapply(1:num_alive, function(i) true_inv_cum_int(V[i,j]))
+    #}
     # I seriously dont get it...
+    #ggplot()+geom_point(aes(x= inv_cum_int_true[,1], event_times[,1])) + geom_abline(slope = 1)
+    #ggplot()+geom_point(aes(x= inv_cum_int_true[,2], event_times[,2])) + geom_abline(slope = 1)
     
     # How many times can you experience the various events?
     for(j in 1:num_events){
