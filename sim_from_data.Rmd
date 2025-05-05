@@ -47,20 +47,25 @@ A little test
 ```{r}
 predict_data <- data.frame("A0" = c(1,1), "L0" = c(0.5, 0.5), "L" = c(0,1))
 
-hazzest_t2d <- basehaz(cox_t2d, predict_data, centered = TRUE)
-hazzest_death <- basehaz(cox_death, predict_data)
+basehazz_t2d <- basehaz(cox_t2d, centered = TRUE)
+basehazz_death <- basehaz(cox_death, centered = TRUE)
+cox_term_t2d <- exp(predict(cox_t2d, newdata=predict_data, type="lp"))
+cox_term_death <- exp(predict(cox_death, newdata=predict_data, type="lp"))
+cum_int_t2d <- outer(basehazz_t2d[['hazard']], cox_term_t2d, "*")
+cum_int_death <- outer(basehazz_death[['hazard']], cox_term_death, "*")
+
 true_surv_death_func1 <- function(t) exp( - 0.1  * t^(1.1) * exp(1 * 0.5 + 0 * (-1) + 0 * 1))
 true_surv_death_func2 <- function(t) exp( - 0.1  * t^(1.1) * exp(1 * 0.5 + 0 * (-1) + 1 * 1))
 true_surv_t2d_func <- function(t) exp( - 0.1  * t^(1.1) * exp(1 * 0.5 + -1 * 1))
 
 gridExtra::grid.arrange(
-  ggplot(data = data.frame(x = hazzest_death$time, y = exp(-hazzest_death[,1])))+
+  ggplot(data = data.frame(x = basehazz_death$time, y = exp(-cum_int_death[,1])))+
     geom_line(aes(x = x, y = y), color = "red") +
     geom_function(fun = true_surv_death_func1),
-  ggplot(data = data.frame(x = hazzest_death$time, y = exp(-hazzest_death[,2])))+
+  ggplot(data = data.frame(x = basehazz_death$time, y = exp(-cum_int_death[,2])))+
     geom_line(aes(x = x, y = y), color = "red") +
     geom_function(fun = true_surv_death_func2),
-  ggplot(data = data.frame(x = hazzest_t2d$time, y = exp(-hazzest_t2d[,1])))+
+  ggplot(data = data.frame(x = basehazz_t2d$time, y = exp(-cum_int_t2d[,1])))+
     geom_line(aes(x = x, y = y), color = "red") +
     geom_function(fun = true_surv_t2d_func),
   nrow = 2)
@@ -96,8 +101,6 @@ simEventDataCox <- function(N,
   alive <- 1:N                                            # Vector for keeping track of who is alive
   num_alive <- N                                          # Number of alive individuals
   T_k <- rep(0, N)                                        # Last event time
-  cum_int_Tk <- matrix(0, ncol = num_events, nrow = N)    # The cumulative intensity at Time 0 is 0
-  event_times <- matrix(ncol = num_events, nrow = N)      # A matrix for event times
   
   # Matrix for storing data
   sim_data <- matrix(nrow = N, ncol = (2 + num_events))
@@ -119,18 +122,27 @@ simEventDataCox <- function(N,
   
   # Function to find the inverse cumulative intensity
   inv_cum_int <- function(int_vals, time_vals, p) {
-    T_k_1 <- time_vals[int_vals >= p,]                      # We find the times for which intensity > p
+    T_k_1 <- time_vals[int_vals >= p]                      # We find the times for which intensity > p
     ifelse(length(T_k_1) == 0, max(time_vals), min(T_k_1))  # We find the inverse cumulative intensity
   }
   
+  # Base hazard
+  basehazz_list <- lapply(cox_fits, function(model) basehaz(model, centered = FALSE))
+  # Jump times of the base hazard
+  jump_times <- lapply(basehazz_list, function(df) df[["time"]])
+  basehazz_list <- lapply(basehazz_list, function(df) df[["hazard"]])
+  
   while(length(alive) != 0){
-    # Fit the cumulative intensities
-    cumInt_list <- lapply(cox_fits, function(model) basehaz(model, sim_data[alive,]))
+    # Calculate the Cox term
+    cox_term <- lapply(cox_fits, function(model) exp(predict(model, newdata = sim_data, type="lp")))
     
-    # Jump times of the cumulative intensities
-    jump_times <- lapply(cumInt_list, function(matrix) matrix['time'])
+    # Calculate the cumulative intensity
+    cumInt_list <- Map(function(base_vec, cox_vec) {
+      outer(base_vec, cox_vec, "*")
+      }, basehazz_list, cox_term)
     
-    # We find the cumulative intensity of event j and individual i at the event time T_k
+    # We find the cumulative intensity of event j and the ith individual at the event time T_k
+    cum_int_Tk <- matrix(0, ncol = num_events, nrow = num_alive)
     for(j in 1:num_events){
       cum_int_Tk[,j] <- sapply(1:num_alive, function(i) cum_int(cumInt_list[[j]][,i], jump_times[[j]], T_k[i]))
     }
@@ -138,13 +150,15 @@ simEventDataCox <- function(N,
     # Simulate the uniform random variable
     U <- -log(runif(num_alive))
     V <- apply(cum_int_Tk, 2, function(cumInt) cumInt + U)
+    # Find the event times
+    event_times <- matrix(ncol = num_events, nrow = num_alive)
     for(j in 1:num_events){
       event_times[,j] <- sapply(1:num_alive, function(i) inv_cum_int(cumInt_list[[j]][,i], jump_times[[j]], V[i,j]))
     }
     
     # How many times can you experience the various events?
     for(j in 1:num_events){
-      event_times[sim_data[alive, (2+j)] == n_event_max[j], j] <- Inf
+      event_times[sim_data[, (2+j)] == n_event_max[j], j] <- Inf
     }
     
     # The next event is the minimum of these events
@@ -153,7 +167,7 @@ simEventDataCox <- function(N,
     
     # Update event counts
     for(i in 1:num_alive){
-      sim_data[alive[i], (Deltas[i] + 2)] <- sim_data[alive[i], (Deltas[i] + 2)] + 1
+      sim_data[i, (Deltas[i] + 2)] <- sim_data[i, (Deltas[i] + 2)] + 1
     }
     
     # Store data
@@ -161,16 +175,15 @@ simEventDataCox <- function(N,
                             Time = T_k,
                             Delta = Deltas)
   
-    res_list[[idx]] <- cbind(kth_event, data.table::as.data.table(sim_data[alive, , drop = FALSE]))
+    res_list[[idx]] <- cbind(kth_event, data.table::as.data.table(sim_data))
     idx <- idx + 1
     
     # Who is still alive?
     alive <- alive[!(Deltas %in% term_events)]
     num_alive <- length(alive)
     # For the next iteration we only keep data from individuals alive
-    T_k <- T_k[alive]                           
-    cum_int_Tk <- cum_int_Tk[alive,]
-    event_times <- event_times[alive,]
+    T_k <- T_k[alive] 
+    sim_data <- sim_data[alive, , drop = FALSE]
   }
   
   res <- data.table::rbindlist(res_list)
@@ -183,7 +196,7 @@ simEventDataCox <- function(N,
 
 ```{r}
 cox_fits <- list(death = cox_death, t2d = cox_t2d)
-new_data <- simEventDataCox(1000, cox_fits, L0_old = data$L0)
+new_data <- simEventDataCox(3000, cox_fits, L0_old = data$L0)
 ```
 
 
@@ -191,26 +204,35 @@ new_data <- simEventDataCox(1000, cox_fits, L0_old = data$L0)
 
 ```{r}
 # Transform data into tstart tstop format
-data_int2 <- IntFormatData(new_data, N_cols = 6)
+data_int2 <- IntFormatData(new_data, N_cols = 6:7)
 
 # Fit Cox models
 cox_death2 <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0 + A0 + L, data = data_int2)
 cox_t2d2 <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + A0, data = data_int2[L == 0])
+basehazz_t2d2 <- basehaz(cox_t2d2, centered = TRUE)
+basehazz_death2 <- basehaz(cox_death2, centered = TRUE)
 
-surv_death2 <- survfit(cox_death2, newdata = predict_data, method = "breslow")
-surv_t2d2 <- survfit(cox_t2d2, newdata = predict_data, method = "breslow")
+predict_data <- data.frame("A0" = c(1,1), "L0" = c(0.5, 0.5), "L" = c(0,1))
+cox_term_t2d2 <- exp(predict(cox_t2d2, newdata=predict_data, type="lp"))
+cox_term_death2 <- exp(predict(cox_death2, newdata=predict_data, type="lp"))
+cum_int_t2d2 <- outer(basehazz_t2d2[['hazard']], cox_term_t2d2, "*")
+cum_int_death2 <- outer(basehazz_death2[['hazard']], cox_term_death2, "*")
 
-ggplot()+
-  geom_line(aes(x = surv_death$time, y = surv_death$surv), color = "red") +
-  geom_line(aes(x = surv_death2$time, y = surv_death2$surv), color = "blue") +
-  geom_function(fun = true_surv_death_func)
-
-ggplot()+
-  geom_line(aes(x = surv_t2d$time, y = surv_t2d$surv), color = "red") +
-  geom_line(aes(x = surv_t2d2$time, y = surv_t2d2$surv), color = "blue") +
-  geom_function(fun = true_surv_t2d_func)
+gridExtra::grid.arrange(
+  ggplot()+
+    geom_line(aes(x = basehazz_death$time, y = exp(-cum_int_death[,1])), color = "red") +
+    geom_line(aes(x = basehazz_death2$time, y = exp(-cum_int_death2[,1])), color = "blue") + 
+    geom_function(fun = true_surv_death_func1),
+  ggplot()+
+    geom_line(aes(x = basehazz_death$time, y = exp(-cum_int_death[,2])), color = "red") +
+    geom_line(aes(x = basehazz_death2$time, y = exp(-cum_int_death2[,2])), color = "blue") + 
+    geom_function(fun = true_surv_death_func2),
+  ggplot()+
+    geom_line(aes(x = basehazz_t2d$time, y = exp(-cum_int_t2d[,1])), color = "red") +
+    geom_line(aes(x = basehazz_t2d2$time, y = exp(-cum_int_t2d2[,1])), color = "blue") + 
+    geom_function(fun = true_surv_t2d_func),
+  nrow = 2)
 ```
-Not really working
 
 ## Trying with competing risk data
 
@@ -228,7 +250,7 @@ surv_death <- survfit(cox_death, newdata = predict_data, method = "breslow")
 surv_t2d <- survfit(cox_t2d, newdata = predict_data, method = "breslow")
 
 cox_fits <- list(death = cox_death, t2d = cox_t2d)
-new_data <- simEventDataCox(3000, cox_fits, L0_old = data$L0, term_events = c(1,2))
+new_data <- simEventDataCox(5000, cox_fits, L0_old = data$L0, term_events = c(1,2))
 
 # Fit Cox models
 cox_death2 <- coxph(Surv(Time, Delta == 1) ~ L0 + A0, data = new_data)
