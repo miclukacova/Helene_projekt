@@ -156,6 +156,14 @@ simEventDataCox <- function(N,
       event_times[,j] <- sapply(1:num_alive, function(i) inv_cum_int(cumInt_list[[j]][,i], jump_times[[j]], V[i,j]))
     }
     
+    # Checking whether the true inverse cumulative intensity corresponds to the one we calculate
+    # It does!!!!!!!!!
+    inv_cum_int_true <- matrix(ncol = num_events, nrow = num_alive)
+    for(j in 1:num_events){
+      inv_cum_int_true[,j] <- sapply(1:num_alive, function(i) true_inv_cum_int(V[i,j]))
+    }
+    # I seriously dont get it...
+    
     # How many times can you experience the various events?
     for(j in 1:num_events){
       event_times[sim_data[, (2+j)] == n_event_max[j], j] <- Inf
