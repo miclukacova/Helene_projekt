@@ -26,7 +26,7 @@ theme_set(theme_bw())
 
 ```{r}
 set.seed(373)
-data <- simT2D(N = 5000, beta_A0_L = -1)
+data <- simT2D(N = 10000, beta_L0_L = 0, beta_L0_D = 0, beta_L_D = 0)
 ```
 
 ## Estimation
@@ -54,9 +54,9 @@ cox_term_death <- exp(predict(cox_death, newdata=predict_data, type="lp"))
 cum_int_t2d <- outer(basehazz_t2d[['hazard']], cox_term_t2d, "*")
 cum_int_death <- outer(basehazz_death[['hazard']], cox_term_death, "*")
 
-true_surv_death_func1 <- function(t) exp( - 0.1  * t^(1.1) * exp(1 * 0.5 + 0 * (-1) + 0 * 1))
-true_surv_death_func2 <- function(t) exp( - 0.1  * t^(1.1) * exp(1 * 0.5 + 0 * (-1) + 1 * 1))
-true_surv_t2d_func <- function(t) exp( - 0.1  * t^(1.1) * exp(1 * 0.5 + -1 * 1))
+true_surv_death_func1 <- function(t) exp( - 0.1  * t^(1.1)) # * exp(1 * 0.5 + 0 * (-1) + 0 * 1))
+true_surv_death_func2 <- function(t) exp( - 0.1  * t^(1.1)) # * exp(1 * 0.5 + 0 * (-1) + 1 * 1))
+true_surv_t2d_func <- function(t) exp( - 0.1  * t^(1.1)) # * exp(1 * 0.5 + -1 * 1))
 
 gridExtra::grid.arrange(
   ggplot(data = data.frame(x = basehazz_death$time, y = exp(-cum_int_death[,1])))+
@@ -75,22 +75,23 @@ Estimates quite well.
 
 ## Simulation function
 
-In order to simulate new data from an observed data set, we start out by initializing $N$ observations. We draw the $A_0$ covariate from a Bernoulli with probability $0.5$  and the $L_0$ we sample from the empirical distribution. We initialize the $T_0$ as $0$ and the cumulative intensity at this time as $0$. 
+In order to simulate new data from an observed data set, we have to estimate the intensities of the various processes. In the following we do this by assuming a Cox model. We estimate the regression parameters by Cox regression and the baseline hazard by the Breslow estimator, as described in~\ref{sec:xxx}. Since we know that data is generated in this way, this is quite a sensible procedure. However in real life, many other non parametric estimation procedures could be more reasonable. We use functions from the `survival` package to estimate the necessary quantities, specifically the `basehaz`, `coxph` and `predict` functions. 
 
-Then as long as we have individuals that are alive, we for each individual find the cumulative intensity functions of death and T2D. In order to simulate the next event time $T_k = T_{k-1} + W_k$ we need to find the waiting time $W_k$. We find this time by finding the waiting time of each event and taking the minimum, in this case, the waiting time of the death event $W_k^{death}$ and the waiting time of the T2D event $W_k^{T2D}$. $W_k^x$ is distributed with cumulative intensity
-$$ \tilde{\Lambda}^x(u|T_{k-1} = t) = \Lambda^x(u + t ) - \Lambda^x(t)$$
-We then have that
+Once the intensities of the processes have been estimated, we initialize the simulated data by making $N$ draws from the empirical distribution of the baseline covariates of the observed data. We initialize $T_0$ as $0$, and a vector that keeps track of the alive individuals. 
+
+Then as long as we have individuals that are alive, we for each alive individual calculate the cumulative intensity of the various processes. We use the estimates obtained from the Cox regression and the Breslow estimator. In order to simulate the next event time $T_k = T_{k-1} + W_k$ by finding the next event time of each event $T_k^x$ and taking the minimum. From Section~\ref{sec:xxx} we remember that the event specific waiting times $W_k^x$ are distributed with cumulative intensity
+$$\tilde{\Lambda}^x(u|T_{k-1} = t) = \Lambda^x(u + t) - \Lambda^x(t)$$
+And that
 $$(\tilde{\Lambda}^x)^{-1}(-\log(U)) \sim \tilde{\Lambda}^x(u)$$
 Where $U$ is a uniform random variable. The inverse cumulative intensity of the waiting times is given by
-$$(\tilde{\Lambda}^x)^{-1}(u |T_{k-1} = t, \mathcal{F}_{(u+t)-}) = \Lambda^{-1}_x(-\log u + \Lambda(t|F_{t-})|\mathcal{F}_{(u+t)-}) - t$$
-So in order to simulate event specific waiting times, we draw uniform random variables take the minus log and of this number take the inverse cumulative intensity and subtract $t$. 
-
-The simulation procedure is implemented in the function `simEventDataCox` below. 
+$$(\tilde{\Lambda}^x)^{-1}(u |T_{k-1} = t, \mathcal{F}_{(u+t)-}) = \Lambda^{-1}_x(-\log u + t) - \Lambda(t|F_{t-})|\mathcal{F}_{(u+t)-}) - t$$
+So in order to simulate event times, we draw uniform random variables take the minus log and of this number take the inverse cumulative intensity and subtract $t$. The simulation procedure is summarized in Table~\ref{tab:xxx}. The simulation procedure is implemented in the function `simEventDataCox` below. 
 
 ```{r}
 simEventDataCox <- function(N, 
                             cox_fits,
                             L0_old, 
+                            A0_old,
                             max_events = 3, 
                             proc_names = c("D", "L"),
                             n_event_max = c(1,1),
@@ -106,7 +107,7 @@ simEventDataCox <- function(N,
   sim_data <- matrix(nrow = N, ncol = (2 + num_events))
   colnames(sim_data) <- c("L0", "A0", proc_names)
   sim_data[,1] <- sample(L0_old, N, replace = TRUE)       # sample with replacement from old data
-  sim_data[,2] <- rbinom(N, 1, 0.5)                       # A0 
+  sim_data[,2] <- sample(A0_old, N, replace = TRUE)       # sample with replacement from old data
   sim_data[,3:(num_events+2)] <- 0
   sim_data <- data.frame(sim_data)
   
@@ -122,8 +123,8 @@ simEventDataCox <- function(N,
   
   # Function to find the inverse cumulative intensity
   inv_cum_int <- function(int_vals, time_vals, p) {
-    T_k_1 <- time_vals[int_vals >= p]                      # We find the times for which intensity > p
-    ifelse(length(T_k_1) == 0, max(time_vals), min(T_k_1))  # We find the inverse cumulative intensity
+    T_k_1 <- time_vals[int_vals <= p]                      # We find the times for which intensity > p
+    ifelse(length(T_k_1) == 0, Inf, max(T_k_1))            # We find the inverse cumulative intensity
   }
   
   # Base hazard
@@ -134,39 +135,29 @@ simEventDataCox <- function(N,
   
   while(length(alive) != 0){
     # Calculate the Cox term
-    cox_term <- lapply(cox_fits, function(model) exp(predict(model, newdata = sim_data, type="lp")))
+    cox_term <- lapply(cox_fits, 
+                       function(model) exp(predict(model, newdata = sim_data, type="lp", reference = "zero")))
     
     # Calculate the cumulative intensity
     cumInt_list <- Map(function(base_vec, cox_vec) {
-      outer(base_vec, cox_vec, "*")
-      }, basehazz_list, cox_term)
+    outer(base_vec, cox_vec, "*")
+    }, basehazz_list, cox_term)
     
     # We find the cumulative intensity of event j and the ith individual at the event time T_k
-    cum_int_Tk <- matrix(0, ncol = num_events, nrow = num_alive)
+    cum_int_Tk <- matrix(ncol = num_events, nrow = num_alive)
     for(j in 1:num_events){
       cum_int_Tk[,j] <- sapply(1:num_alive, function(i) cum_int(cumInt_list[[j]][,i], jump_times[[j]], T_k[i]))
     }
   
     # Simulate the uniform random variable
-    U <- -log(runif(num_alive))
-    V <- apply(cum_int_Tk, 2, function(cumInt) cumInt + U)
+    U <- matrix(-log(runif(num_alive * num_events)), ncol = num_events)         # matrix for the random draws
+    V <- U + cum_int_Tk
+    
     # Find the event times
-    event_times <- matrix(ncol = num_events, nrow = num_alive)
+    event_times <- matrix(ncol = num_events, nrow = num_alive)                  # matrix for event times
     for(j in 1:num_events){
       event_times[,j] <- sapply(1:num_alive, function(i) inv_cum_int(cumInt_list[[j]][,i], jump_times[[j]], V[i,j]))
     }
-    
-    # Checking whether the true inverse cumulative intensity corresponds to the one we calculate
-    # It does!!!!!!!!!
-    #browser()
-    #inv_cum_int_true <- matrix(ncol = num_events, nrow = num_alive)
-    #true_inv_cum_int <- function(y) (y/0.1)^(1/1.1)
-    #for(j in 1:num_events){
-    #  inv_cum_int_true[,j] <- sapply(1:num_alive, function(i) true_inv_cum_int(V[i,j]))
-    #}
-    # I seriously dont get it...
-    #ggplot()+geom_point(aes(x= inv_cum_int_true[,1], event_times[,1])) + geom_abline(slope = 1)
-    #ggplot()+geom_point(aes(x= inv_cum_int_true[,2], event_times[,2])) + geom_abline(slope = 1)
     
     # How many times can you experience the various events?
     for(j in 1:num_events){
@@ -208,7 +199,7 @@ simEventDataCox <- function(N,
 
 ```{r}
 cox_fits <- list(death = cox_death, t2d = cox_t2d)
-new_data <- simEventDataCox(3000, cox_fits, L0_old = data$L0)
+new_data <- simEventDataCox(5000, cox_fits, L0_old = data$L0, A0_old = data$A0)
 ```
 
 
@@ -243,15 +234,21 @@ gridExtra::grid.arrange(
     geom_line(aes(x = basehazz_t2d$time, y = exp(-cum_int_t2d[,1])), color = "red") +
     geom_line(aes(x = basehazz_t2d2$time, y = exp(-cum_int_t2d2[,1])), color = "blue") + 
     geom_function(fun = true_surv_t2d_func),
+  ggplot()+
+    geom_line(aes(x = basehazz_t2d$time, y = exp(-cum_int_t2d[,2])), color = "red") +
+    geom_line(aes(x = basehazz_t2d2$time, y = exp(-cum_int_t2d2[,2])), color = "blue") + 
+    geom_function(fun = true_surv_t2d_func),
   nrow = 2)
 ```
+
+Så længe vi ikke har cox effekter ser det ud til at virke. 
 
 ## Trying with competing risk data
 
 ```{r}
 set.seed(373)
-data <- simCRdata(10000)
-predict_data <- data.frame("A0" = 0, "L0" = 0.5)
+data <- simCRdata(50000)
+predict_data <- data.frame("A0" = 0, "L0" = 0)
 true_surv_death_func <- function(t) exp( - 0.1  * t^(1.1)) 
 true_surv_t2d_func <- function(t) exp( - 0.1  * t^(1.1))
 
@@ -262,7 +259,44 @@ surv_death <- survfit(cox_death, newdata = predict_data, method = "breslow")
 surv_t2d <- survfit(cox_t2d, newdata = predict_data, method = "breslow")
 
 cox_fits <- list(death = cox_death, t2d = cox_t2d)
-new_data <- simEventDataCox(5000, cox_fits, L0_old = data$L0, term_events = c(1,2))
+new_data <- simEventDataCox(3000, cox_fits, L0_old = data$L0, term_events = c(1,2), A0_old = data$A0)
+
+# Fit Cox models
+cox_death2 <- coxph(Surv(Time, Delta == 1) ~ L0 + A0, data = new_data[Time != Inf])
+cox_t2d2 <- coxph(Surv(Time, Delta == 2) ~ L0 + A0, data = new_data[Time != Inf])
+
+surv_death2 <- survfit(cox_death2, newdata = predict_data, method = "breslow")
+surv_t2d2 <- survfit(cox_t2d2, newdata = predict_data, method = "breslow")
+
+ggplot()+
+  geom_line(aes(x = surv_death$time, y = surv_death$surv), color = "red") +
+  geom_line(aes(x = surv_death2$time, y = surv_death2$surv), color = "blue") +
+  geom_function(fun = true_surv_death_func)
+
+ggplot()+
+  geom_line(aes(x = surv_t2d$time, y = surv_t2d$surv), color = "red") +
+  geom_line(aes(x = surv_t2d2$time, y = surv_t2d2$surv), color = "blue") +
+  geom_function(fun = true_surv_t2d_func)
+```
+
+## Trying with competing risk data with effects
+
+```{r}
+set.seed(373)
+beta <- matrix(rnorm(3*2), nrow = 2)
+data <- simCRdata(50000, beta = beta)
+predict_data <- data.frame("L0" = 0, "A0" = 0)
+true_surv_death_func <- function(t) exp( - 0.1  * t^(1.1)*exp(sum(beta[,2] * predict_data)))
+true_surv_t2d_func <- function(t) exp( - 0.1  * t^(1.1)*exp(sum(beta[,3] * predict_data)))
+
+# Fit Cox models
+cox_death <- coxph(Surv(Time, Delta == 1) ~ L0 + A0, data = data)
+cox_t2d <- coxph(Surv(Time, Delta == 2) ~ L0 + A0, data = data)
+surv_death <- survfit(cox_death, newdata = predict_data, method = "breslow")
+surv_t2d <- survfit(cox_t2d, newdata = predict_data, method = "breslow")
+
+cox_fits <- list(death = cox_death, t2d = cox_t2d)
+new_data <- simEventDataCox(3000, cox_fits, L0_old = data$L0, term_events = c(1,2), A0_old = data$A0)
 
 # Fit Cox models
 cox_death2 <- coxph(Surv(Time, Delta == 1) ~ L0 + A0, data = new_data)
@@ -282,3 +316,6 @@ ggplot()+
   geom_function(fun = true_surv_t2d_func)
 ```
 
+Problemet er hvordan covariaterne influencerer, min funktion som estimerer på simuleret data, estimerer som om covariaterne var nul altid!
+
+https://github.com/kkholst/mets/blob/develop/R/sim-pc-hazard.R
