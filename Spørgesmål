@@ -1,0 +1,12 @@
+Spørgesmål
+
+1) hvad dælen er det der går galt i min simulationsfunktion????? Jeg er meget mystificeret.
+Jeg har det også som om der er noget galt med predict. Det kan være du skal vise Helene det.
+2) hvordan skal vi lave interventioner, del din ide med Helene
+3) at risk funktionen, lige nu er den defineret som om man ikke er at risk i tidspunkt T. Er det et problem?
+4) filtrationerne vi betinger på. Når vi splitter op i martingal og compensator, 
+skal filtrationerne på begge? og for ventetiderne, hvilke filtrationer betinger vi så på (u+t) eller
+blot u?
+5) finite variation process
+
+https://github.com/kkholst/mets/blob/develop/R/sim-pc-hazard.R
