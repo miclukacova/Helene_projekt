@@ -104,6 +104,7 @@ We find the mean and sd
 ```{r}
 c <- numeric(4)
 surv_prop_mean0 <- numeric(4)
+surv_prop_mean1 <- numeric(4)
 surv_prop_sd1 <- numeric(4)
 surv_prop_sd0 <- numeric(4)
 
@@ -123,7 +124,7 @@ For each of set of parameter values, we simulate $B$ data sets with $N$ subjects
 ```{r}
 set.seed(836)
 N <- 1000
-B <- 500
+B <- 1000
 res1 <- simStudyT2D(N = N, B = B, eta = eta, nu = nu, beta_L0_D = beta_L0_D[1], 
                 beta_L0_L = beta_L0_L[1], beta_A0_L = beta_A0_L[1], 
                 beta_L_D = beta_L_D[1], beta_A0_D = beta_A0_D[1], tau = tau)
