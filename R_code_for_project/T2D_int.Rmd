@@ -30,7 +30,7 @@ N1 <- 2 * 10^5
 N2 <- 2 * 10^5
 tau <- 2
 
-set.seed(927)
+set.seed(926)
 MC_ests_T2D <- matrix(nrow = B1, ncol = 2)
 for(b in 1:B1){
   print(b)
@@ -92,7 +92,7 @@ for(b in 1:B1){
 ```{r}
 beta_true <- mean(MC_ests_T2D[,1]-MC_ests_T2D[,2])
 beta_true
-var(MC_ests_T2D[,1]-MC_ests_T2D[,2])
+sd(MC_ests_T2D[,1]-MC_ests_T2D[,2])
 ```
 
 
@@ -101,8 +101,8 @@ var(MC_ests_T2D[,1]-MC_ests_T2D[,2])
 Gentagne estimationer:
 
 ```{r}
-set.seed(735)
-B <- 600
+set.seed(736)
+B <- 800
 tau <- 2
 N1 <- 1000
 N2 <- 10^5

@@ -63,7 +63,8 @@ sd_beta_true
 Gentagne estimationer:
 
 ```{r}
-B <- 400
+set.seed(7357)
+B <- 800
 tau <- 2
 N1 <- 1000
 N2 <- 10^5
