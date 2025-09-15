@@ -30,7 +30,7 @@ To approximate the expectations \(E_{P}(Y)\) and \(E_{P^\gamma}(Y)\), we will si
 \[\hat{L}_j(0, \tau) = \frac{1}{n} \sum_{i=1}^n 1(D_i = j) (\tau - T_i \wedge \tau)\]
 For large \(N\). 
 
-## In the T2D settings
+## In the T2D setting
 
 
 ```{r}
@@ -114,3 +114,38 @@ beta_true
 var(MC_ests_T2D[,1]-MC_ests_T2D[,2])
 ```
 
+## In the Confounder Setting
+
+```{r}
+set.seed(103)
+B1 <- 10
+N1 <- 10^5
+N2 <- 10^5
+tau <- 2
+MC_ests <- matrix(nrow = B1, ncol = 2)
+
+for(i in 1:B1){
+  print(i)
+  
+  # Generate data without intervention
+  data1 <- simConfounding(N = N2, beta_L_A = 3, beta_L_D = 3, beta_A_D = -0.5, 
+                          beta_A_L = -0.5, beta_L0_A = 1, beta_L0_L = 1, 
+                          beta_L0_D = 1, cens = 0, op = 1)
+  
+  # Generate data under intervention
+  dataInt <- simConfounding(N = N2, beta_L_A = 0, beta_L_D = 3, beta_A_D = -0.5, 
+                            beta_A_L = -0.5, beta_L0_A = 0, beta_L0_L = 1, beta_L0_D = 1, 
+                            cens = 0, op = 0)
+  
+  MC_ests[i,] <- c(estimator(data1, cause = 3, tau = tau),   # Data under observed probability distribution
+                   estimator(dataInt, cause = 3, tau = tau)) # Intervened data
+}
+```
+
+```{r}
+beta_true <- mean(MC_ests[,1]- MC_ests[,2])
+sd_beta_true <- sd(MC_ests[,1]- MC_ests[,2])
+
+beta_true
+sd_beta_true
+```
