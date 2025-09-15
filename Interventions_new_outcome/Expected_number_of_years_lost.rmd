@@ -1,0 +1,116 @@
+---
+title: 'Intervention based effects: Expected number of years lost'
+author: "Michaela Lukacova"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# Libraries
+library(data.table)
+library(survival)
+library(simevent)
+library(ggplot2)
+library(microbenchmark)
+theme_set(theme_bw())
+```
+
+# The estimand
+
+We define the effect of an intervention \(\gamma\) as
+\[\beta(P) = E_{P}(Y) - E_{P^\gamma}(Y)\]
+Where \(Y\) is the outcome variable. We will now, as in Andersen 2013, use the outcome variable
+\[Y = L_j(0, \tau) = \int_0^\tau F_j(t) dt = E(\tau - T_{(j)} \wedge \tau)\]
+for \(\tau \geq 0\). \(T_{(j)}\) is the random variable representing the time of event of cause \(j\), and \(F_j(t) = P(T \leq t, D = j) = \int_0^t S(u) \alpha_j (u) du\) is the cumulative incidence. The variable \(L_j(0, \tau)\) is interpreted as the expected number of years lost before \(\tau\) due to cause \(j\). 
+
+# Approximation of true value
+
+To approximate the expectations \(E_{P}(Y)\) and \(E_{P^\gamma}(Y)\), we will simulate under the two probabilities \(P\) and \(P^\gamma\) and use the estimator
+\[\hat{L}_j(0, \tau) = \frac{1}{n} \sum_{i=1}^n 1(D_i = j) (\tau - T_i \wedge \tau)\]
+For large \(N\). 
+
+## In the T2D settings
+
+
+```{r}
+estimator <- function(data, cause, tau) {
+  mean((data$Delta == cause) * (tau - pmin(tau, data$Time)))
+}
+```
+
+We define values
+```{r}
+B1 <- 10
+N1 <- 2 * 10^4
+N2 <- 2 * 10^4
+tau <- 2
+```
+
+
+```{r}
+set.seed(927)
+MC_ests_T2D <- matrix(nrow = B1, ncol = 2)
+for(b in 1:B1){
+  print(b)
+  # Simulate
+  data <- simT2D(N = N1,
+                 eta = c(0.1, 0.3, 0.1),
+                 nu = c(1.1, 1.3, 1.1),
+                 cens = 0,
+                 beta_L0_D = 0.3,
+                 beta_L0_L = 2,
+                 beta_L_D = 1,
+                 beta_A0_D = -0.1,
+                 beta_A0_L = - 2.5)
+  
+  # Format data for inference
+  data <- IntFormatData(data, N_cols = 6)
+  
+  # Group data based on treatment
+  no_treat_group <- data[A0 == 0]
+  treat_group <- data[A0 == 1]
+  
+  # Fit Weibull
+  survfit <- survreg(Surv(Time, Delta == 2) ~ 1, 
+                     data = no_treat_group[L == 0], 
+                     dist='weibull')
+    
+  # Estimates in no treatment group
+  nu_est <- 1/survfit$scale
+  eta_est <- 1/(exp(survfit$coefficients[1]))^nu_est
+  
+  # Generate large data set under the intervened intensity 
+  data_new <- simT2D(N = N2, 
+                   eta = c(0.1, 0.3, eta_est),
+                   nu = c(1.1, 1.3, nu_est),
+                   cens = 0,
+                   beta_L0_D = 0.3,
+                   beta_L0_L = 0,
+                   beta_L_D = 1,
+                   beta_A0_D = -0.1,
+                   beta_A0_L = 0)
+  
+  # Generate large data set without intervened intensity
+  data_new_no_int <- simT2D(N = N2,
+                          eta = c(0.1, 0.3, 0.1),
+                          nu = c(1.1, 1.3, 1.1),
+                          cens = 0,
+                          beta_L0_D = 0.3,
+                          beta_L0_L = 2,
+                          beta_L_D = 1,
+                          beta_A0_D = -0.1,
+                          beta_A0_L = - 2.5)
+  
+  #Proportion of subjects dying before some time $\tau$ in treatment group
+  MC_ests_T2D[b,] <- c(estimator(data_new_no_int, cause = 2, tau = tau),         # without intervention
+                       estimator(data_new, cause = 2, tau = tau))                # with intervention
+}
+```
+
+```{r}
+beta_true <- mean(MC_ests_T2D[,1]-MC_ests_T2D[,2])
+beta_true
+var(MC_ests_T2D[,1]-MC_ests_T2D[,2])
+```
+
