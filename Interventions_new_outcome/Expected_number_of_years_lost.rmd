@@ -61,6 +61,7 @@ beta_A0_L <- -2.5
 alpha <- 0.5
 ```
 
+# In a setting without time varying effects
 
 ```{r}
 set.seed(927)
@@ -100,7 +101,7 @@ for(b in 1:B1){
   MC_ests_T2D_1[b,] <- c(estimator(data, cause = 1, tau = tau),       # without intervention
                        estimator(data_int, cause = 1, tau = tau))     # with intervention
   
-  # expected number of years without diabetes before \(\tau\)
+  # expected number of years without diabetes lost before \(\tau\)
   MC_ests_T2D_2[b,] <- c(estimator(data, cause = 2, tau = tau),       # without intervention
                        estimator(data_int, cause = 2, tau = tau))     # with intervention
 }
@@ -115,6 +116,147 @@ beta_true1 <- mean(MC_ests_T2D_1[,1]-MC_ests_T2D_1[,2])
 beta_true1
 var(MC_ests_T2D_1[,1]-MC_ests_T2D_1[,2])
 ```
+
+## In a setting with time varying effects
+
+```{r}
+set.seed(927)
+MC_ests_T2D_1_TV <- matrix(nrow = B1, ncol = 2)
+MC_ests_T2D_2_TV <- matrix(nrow = B1, ncol = 2)
+
+for(b in 1:B1){
+  print(b)
+  # Generate large data set without intervened intensity
+  data <- simT2D(N = N1,
+                 eta = eta,
+                 nu = nu,
+                 cens = 0,
+                 beta_L0_D = beta_L0_D,
+                 beta_L0_L = beta_L0_L,
+                 beta_L_D = beta_L_D,
+                 beta_A0_D = beta_A0_D,
+                 beta_A0_L = beta_A0_L,
+                 lower = 10^(-100),
+                 upper = 300,
+                 t_prime = 2,
+                 beta_L_D_t_prime = -0.5)
+
+  
+  # Generate large data set under the intervened intensity 
+  data_int <- simT2D(N = N1,
+                 eta = c(eta[1:2],eta[3]*alpha),
+                 nu = nu,
+                 cens = 0,
+                 beta_L0_D = beta_L0_D,
+                 beta_L0_L = beta_L0_L,
+                 beta_L_D = beta_L_D,
+                 beta_A0_D = beta_A0_D,
+                 beta_A0_L = beta_A0_L,
+                 lower = 10^(-100),
+                 upper = 300,
+                 t_prime = 2,
+                 beta_L_D_t_prime = -0.5)
+  
+  # expected number of years lost before \(\tau\)
+  MC_ests_T2D_1_TV[b,] <- c(estimator(data, cause = 1, tau = tau),       # without intervention
+                            estimator(data_int, cause = 1, tau = tau))     # with intervention
+  
+  # expected number of years without diabetes lost before \(\tau\)
+  MC_ests_T2D_2_TV[b,] <- c(estimator(data, cause = 2, tau = tau),       # without intervention
+                            estimator(data_int, cause = 2, tau = tau))     # with intervention
+}
+```
+
+```{r}
+beta_true2 <- mean(MC_ests_T2D_2_TV[,1]-MC_ests_T2D_2_TV[,2])
+beta_true2
+var(MC_ests_T2D_2_TV[,1]-MC_ests_T2D_2_TV[,2])
+
+beta_true1 <- mean(MC_ests_T2D_1_TV[,1]-MC_ests_T2D_1_TV[,2])
+beta_true1
+var(MC_ests_T2D_1_TV[,1]-MC_ests_T2D_1_TV[,2])
+```
+
+# True effect as function of alfa with time varying effects
+
+```{r}
+N1 <- 2*10^4
+press <- 30
+alphas <- seq(0.1, 2, length.out = press)
+res_alpha_TV <- matrix(nrow = press, ncol = 5)
+
+set.seed(7359)
+
+for(i in 1:press){
+  MC_ests_1_TV <- matrix(nrow = B1, ncol = 2)
+  MC_ests_2_TV <- matrix(nrow = B1, ncol = 2)
+  alpha <- alphas[i]
+  print(alpha)
+
+  for(b in 1:B1){
+    # Generate large data set without intervened intensity
+    data <- simT2D(N = N1,
+                   eta = eta,
+                   nu = nu,
+                   cens = 0,
+                   beta_L0_D = beta_L0_D,
+                   beta_L0_L = beta_L0_L,
+                   beta_L_D = beta_L_D,
+                   beta_A0_D = beta_A0_D,
+                   beta_A0_L = beta_A0_L,
+                   lower = 10^(-500),
+                   upper = 400,
+                   t_prime = 2,
+                   beta_L_D_t_prime = -0.5)
+  
+    
+    # Generate large data set under the intervened intensity 
+    data_int <- simT2D(N = N1,
+                   eta = c(eta[1:2],eta[3]*alpha),
+                   nu = nu,
+                   cens = 0,
+                   beta_L0_D = beta_L0_D,
+                   beta_L0_L = beta_L0_L,
+                   beta_L_D = beta_L_D,
+                   beta_A0_D = beta_A0_D,
+                   beta_A0_L = beta_A0_L,
+                   lower = 10^(-500),
+                   upper = 400,
+                   t_prime = 2,
+                   beta_L_D_t_prime = -0.5)
+    
+    # expected number of years lost before \(\tau\)
+    MC_ests_1_TV[b,] <- c(estimator(data, cause = 1, tau = tau),             # without intervention
+                              estimator(data_int, cause = 1, tau = tau))     # with intervention
+    
+    # expected number of years without diabetes before \(\tau\)
+    MC_ests_2_TV[b,] <- c(estimator(data, cause = 2, tau = tau),             # without intervention
+                              estimator(data_int, cause = 2, tau = tau))     # with intervention
+  }
+  
+  res_alpha_TV[i, 2:5] <- c(mean(MC_ests_1_TV[,1]), mean(MC_ests_1_TV[,2]),
+                            mean(MC_ests_2_TV[,1]), mean(MC_ests_2_TV[,2]))  
+}
+
+colnames(res_alpha_TV) <- c("alpha", "DeathNoInt", "DeathInt", "T2DNoInt", "T2DInt")
+res_alpha_TV[,1] <- alphas
+```
+
+```{r}
+
+plotdata <- readRDS(file = "TV_betas.rds")
+#plotdata <- data.table(res_alpha_TV)
+#plotdata[, `:=` (beta1 = DeathNoInt - DeathInt,
+#                 beta2 = T2DNoInt - T2DInt)] 
+
+colorss <- c("beta1" = "hotpink", "beta2" = "darkgreen")
+
+ggplot(data = plotdata)+
+  geom_line(aes(x = alpha, y = beta1, colour = "beta1"))+
+  geom_line(aes(x = alpha, y = beta2, colour = "beta2"))+
+  scale_color_manual(values = colorss)
+```
+
 
 # Intervention effect estimation
 
