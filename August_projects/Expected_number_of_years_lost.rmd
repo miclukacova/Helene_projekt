@@ -33,14 +33,26 @@ We consider the intervention where the eta parameter of the T2D process is multi
 # Approximation of true value
 
 To approximate the expectations \(E_{P}(Y)\) and \(E_{P^\gamma}(Y)\), we will simulate under the two probabilities \(P\) and \(P^\gamma\) and use the estimator
-\[\hat{L}_j(0, \tau) = \frac{1}{n} \sum_{i=1}^n 1(D_i = j) (\tau - T_i \wedge \tau)\]
-For large \(N\). 
+\[\sum_{i=1}^N \hat{F}_j(t) (t_i-t_{i-1})\]
+Where 
+
+
+%To approximate the expectations \(E_{P}(Y)\) and \(E_{P^\gamma}(Y)\), we will simulate under the two %probabilities \(P\) and \(P^\gamma\) and use the estimator
+%\[\hat{L}_j(0, \tau) = \frac{1}{n} \sum_{i=1}^n 1(D_i = j) (\tau - T_i \wedge \tau)\]
 
 ```{r}
 # Definition of estimator
 estimator <- function(data, cause, tau) {
   mean((data$Delta == cause) * (tau - pmin(tau, data$Time)))
 }
+
+estimator2 <- function(data, cause, tau){
+  tgrid <- seq(0, tau, length = 100)
+  prop <- sum(diff(tgrid)[1]*sapply(tgrid[-1], function(t)
+    data[Delta == cause, mean(Delta == cause & Time <= t)]))
+  return(prop)
+}
+
 ```
 
 We define values
@@ -180,22 +192,23 @@ var(MC_ests_T2D_1_TV[,1]-MC_ests_T2D_1_TV[,2])
 # True effect as function of alfa with time varying effects
 
 ```{r}
-N1 <- 2*10^4
-press <- 30
-alphas <- seq(0.1, 2, length.out = press)
-res_alpha_TV <- matrix(nrow = press, ncol = 5)
+alphas <- seq(0.1, 2, length.out = 30)
 
-set.seed(7359)
+E_NYL_alpha <- function(N1 = 10^4, B1 = 10, alphas, eta, nu, beta_L0_D, beta_L0_L,
+                        beta_L_D, beta_A0_D, beta_A0_L, t_prime, beta_L_D_t_prime){
+  
+  n_alphas <- length(alphas)
+  res_alpha_TV <- matrix(nrow = n_alphas, ncol = 5)
+  
+  for(i in 1:n_alphas){
+    MC_ests_1_TV <- matrix(nrow = B1, ncol = 2)
+    MC_ests_2_TV <- matrix(nrow = B1, ncol = 2)
+    alpha <- alphas[i]
+    print(alpha)
 
-for(i in 1:press){
-  MC_ests_1_TV <- matrix(nrow = B1, ncol = 2)
-  MC_ests_2_TV <- matrix(nrow = B1, ncol = 2)
-  alpha <- alphas[i]
-  print(alpha)
-
-  for(b in 1:B1){
-    # Generate large data set without intervened intensity
-    data <- simT2D(N = N1,
+    for(b in 1:B1){
+      # Generate large data set without intervened intensity
+      data <- simT2D(N = N1,
                    eta = eta,
                    nu = nu,
                    cens = 0,
@@ -206,8 +219,8 @@ for(i in 1:press){
                    beta_A0_L = beta_A0_L,
                    lower = 10^(-500),
                    upper = 400,
-                   t_prime = 2,
-                   beta_L_D_t_prime = -0.5)
+                   t_prime = t_prime,
+                   beta_L_D_t_prime = beta_L_D_t_prime)
   
     
     # Generate large data set under the intervened intensity 
@@ -222,8 +235,8 @@ for(i in 1:press){
                    beta_A0_L = beta_A0_L,
                    lower = 10^(-500),
                    upper = 400,
-                   t_prime = 2,
-                   beta_L_D_t_prime = -0.5)
+                   t_prime = t_prime,
+                   beta_L_D_t_prime = beta_L_D_t_prime)
     
     # expected number of years lost before \(\tau\)
     MC_ests_1_TV[b,] <- c(estimator(data, cause = 1, tau = tau),             # without intervention
@@ -236,7 +249,26 @@ for(i in 1:press){
   
   res_alpha_TV[i, 2:5] <- c(mean(MC_ests_1_TV[,1]), mean(MC_ests_1_TV[,2]),
                             mean(MC_ests_2_TV[,1]), mean(MC_ests_2_TV[,2]))  
+  }
+  return(res_alpha_TV)
 }
+```
+
+
+```{r}
+set.seed(0366)
+res_alpha_TV <- E_NYL_alpha(N1 = 2*10^4,
+                            alphas = alphas, 
+                            eta = c(0.1, 0.1, 0.5), 
+                            nu = c(1.1, 0.8, 1.1), 
+                            beta_L0_D = 0.3, 
+                            beta_L0_L = 2,
+                            beta_L_D = 1.5, 
+                            beta_A0_D= -0.1, 
+                            beta_A0_L = -2.5, 
+                            t_prime = 2, 
+                            beta_L_D_t_prime = -0.5)
+
 
 colnames(res_alpha_TV) <- c("alpha", "DeathNoInt", "DeathInt", "T2DNoInt", "T2DInt")
 res_alpha_TV[,1] <- alphas
@@ -248,6 +280,7 @@ plotdata <- readRDS(file = "TV_betas.rds")
 #plotdata <- data.table(res_alpha_TV)
 #plotdata[, `:=` (beta1 = DeathNoInt - DeathInt,
 #                 beta2 = T2DNoInt - T2DInt)] 
+#saveRDS(res_alpha_TV, file = "TV_betas.rds")
 
 colorss <- c("beta1" = "hotpink", "beta2" = "darkgreen")
 

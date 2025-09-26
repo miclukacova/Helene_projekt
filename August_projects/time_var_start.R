@@ -12,7 +12,7 @@ beta <- matrix(nrow = 6, ncol = 4, 10)
 # t_prime bliver sat højt så vi altid er i det sædvanlige scenarie
 t_prime <- 1000                                                
 
-data <- simEventDataTimeVar(N = N, t_prime = t_prime, time_var_eff = time_var_eff, eta = eta,
+data <- simEventTV(N = N, t_prime = t_prime, time_var_eff = time_var_eff, eta = eta,
                             term_deltas = term_deltas, beta = beta, lower = 10^(-20), upper = 10^2,
                             max_events = 5)
 
@@ -31,7 +31,7 @@ any(abs(survfit3$coefficients - beta[c(1,2,5,6),4]) > 0.1)
 # Effekterne bliver sat til 0 så vi igen er i det sævanlige scenarie
 t_prime <- 1
 time_var_eff <- matrix(0, ncol = 4, nrow = 6)
-data <- simEventDataTimeVar(N = N, t_prime = t_prime, time_var_eff = time_var_eff, eta = eta,
+data <- simEventTV(N = N, t_prime = t_prime, time_var_eff = time_var_eff, eta = eta,
                             term_deltas = term_deltas, beta = beta, lower = 10^(-20), upper = 10^2,
                             max_events = 5)
 
@@ -51,7 +51,7 @@ any(abs(survfit3$coefficients - beta[c(1,2,5,6),4]) > 0.1)
 time_var_eff <- matrix(0.3, ncol = 4, nrow = 6)
 t_prime <- 1
 
-data <- simEventDataTimeVar(N = N, t_prime = t_prime, time_var_eff = time_var_eff, eta = eta,
+data <- simEventTV(N = N, t_prime = t_prime, time_var_eff = time_var_eff, eta = eta,
                             term_deltas = term_deltas, beta = beta, lower = 10^(-20), upper = 10^2,
                             max_events = 5)
 

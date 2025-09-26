@@ -1,0 +1,43 @@
+---
+title: "TryOutalphaSimDisease"
+output: html_document
+---
+
+# Mulighed for at til-/fravælge censorering
+
+```{r}
+alphaSimDisease(N = 1000, alpha = 0.7, tau = 5, years_lost = FALSE, a0 = 1, cens = 0)
+alphaSimDropIn(N = 1000, alpha = 0.7, tau = 5, years_lost = FALSE, a0 = 1, cens = 0)
+alphaSimTreat(N = 1000, alpha = 0.7, tau = 5, years_lost = FALSE, cens = 0)
+```
+# Mulighed for at sætte A0 til 1 eller 0 
+
+```{r}
+gen_A0 <- function(N,L0) 1
+alphaSimDisease(N = 1000, alpha = 0.7, tau = 5, years_lost = FALSE, a0 = 1, gen_A0 = gen_A0)
+alphaSimDropIn(N = 1000, alpha = 0.7, tau = 5, years_lost = FALSE, a0 = 1, cens = 0, gen_A0 = gen_A0)
+```
+
+
+# Mulighed for at vælge at 1) regne estimanden: enten 1a) absolut risiko på tid tau (som vi hele tiden har gjort), ellers 1b) years lost (det er lige nu argumentet "rmst", men navnet på argumentet kunne ændres til "years_lost"), eller 2) at få datasættet direkte ud. 
+
+```{r}
+# 1a)
+alphaSimDisease(N = 1000, alpha = 0.7, tau = 5, years_lost = FALSE, a0 = 1, gen_A0 = gen_A0)
+alphaSimDropIn(N = 1000, alpha = 0.7, tau = 5, years_lost = FALSE, a0 = 1, cens = 0)
+alphaSimTreat(N = 1000, alpha = 0.7, tau = 5, years_lost = FALSE, cens = 0)
+
+# 1b)
+alphaSimDisease(N = 1000, alpha = 0.7, tau = 5, years_lost = TRUE, a0 = 1, gen_A0 = gen_A0)
+alphaSimDropIn(N = 1000, alpha = 0.7, tau = 5, years_lost = TRUE, a0 = 1, cens = 0)
+alphaSimTreat(N = 1000, alpha = 0.7, tau = 5, years_lost = TRUE, cens = 0)
+
+# 2
+head(alphaSimDisease(N = 1000, alpha = 0.7, tau = 5, years_lost = FALSE, a0 = 1, 
+                     gen_A0 = gen_A0, return_data = TRUE))
+head(alphaSimDropIn(N = 1000, alpha = 0.7, tau = 5, years_lost = FALSE, a0 = 1, 
+                    cens = 0, return_data = TRUE))
+head(alphaSimTreat(N = 1000, alpha = 0.7, tau = 5, years_lost = FALSE, cens = 0, 
+                   return_data = TRUE))
+```
+
