@@ -37,19 +37,27 @@ To approximate the expectations \(E_{P}(Y)\) and \(E_{P^\gamma}(Y)\), we will si
 Where 
 
 
-%To approximate the expectations \(E_{P}(Y)\) and \(E_{P^\gamma}(Y)\), we will simulate under the two %probabilities \(P\) and \(P^\gamma\) and use the estimator
-%\[\hat{L}_j(0, \tau) = \frac{1}{n} \sum_{i=1}^n 1(D_i = j) (\tau - T_i \wedge \tau)\]
+To approximate the expectations \(E_{P}(Y)\) and \(E_{P^\gamma}(Y)\), we will simulate under the two probabilities \(P\) and \(P^\gamma\) and use the estimator
+\[\hat{L}_j(0, \tau) = \frac{1}{n} \sum_{i=1}^n 1(D_i = j) (\tau - T_i \wedge \tau)\]
+Where all the times where the individual is at risk of event \(j\) are included in the sum. 
 
 ```{r}
-# Definition of estimator
-estimator <- function(data, cause, tau) {
-  mean((data$Delta == cause) * (tau - pmin(tau, data$Time)))
+# Approximation of target quantity
+years_lost <- function(data, cause, tau) {
+  mean(tau - pmin(tau, data[Delta == cause, Time]))
 }
 
-estimator2 <- function(data, cause, tau){
+# Alternative way of approximation 1
+years_lost1 <- function(data, cause, tau){
+  data[, tmp := cumsum((Delta == cause)*(tau - pmin(tau, Time))), by = "ID"]
+  data[, tmp[.N], by = "ID"][, mean(V1)]
+}
+
+# Alternative approximation 2
+years_lost2 <- function(data, cause, tau){
   tgrid <- seq(0, tau, length = 100)
   prop <- sum(diff(tgrid)[1]*sapply(tgrid[-1], function(t)
-    data[Delta == cause, mean(Delta == cause & Time <= t)]))
+    mean(data[, any(Delta == cause & Time <= t)[1], by = "ID"][[2]])))
   return(prop)
 }
 
@@ -58,8 +66,8 @@ estimator2 <- function(data, cause, tau){
 We define values
 ```{r}
 B1 <- 10
-N1 <- 10^5
-N2 <- 10^5
+N1 <- 10^4
+N2 <- 10^4
 tau <- 5
 eta <- c(0.1, 0.1, 0.5)
 nu <- c(1.1, 0.8, 1.1)
@@ -73,12 +81,12 @@ beta_A0_L <- -2.5
 alpha <- 0.5
 ```
 
-# In a setting without time varying effects
+# Checking that the three ways of approximation are the same in a setting without time varying effects
 
 ```{r}
 set.seed(927)
-MC_ests_T2D_1 <- matrix(nrow = B1, ncol = 2)
-MC_ests_T2D_2 <- matrix(nrow = B1, ncol = 2)
+MC_ests_T2D_1 <- matrix(nrow = B1, ncol = 6)
+MC_ests_T2D_2 <- matrix(nrow = B1, ncol = 6)
 
 for(b in 1:B1){
   print(b)
@@ -109,24 +117,44 @@ for(b in 1:B1){
                  lower = 10^(-30),
                  upper = 200)
   
+  #data <- IntFormatData(data, N_cols = 6)
+  #data_int <- IntFormatData(data_int, N_cols = 6)
+  
   # expected number of years lost before \(\tau\)
-  MC_ests_T2D_1[b,] <- c(estimator(data, cause = 1, tau = tau),       # without intervention
-                       estimator(data_int, cause = 1, tau = tau))     # with intervention
+  MC_ests_T2D_1[b,] <- c(years_lost(data, cause = 1, tau = tau),         # without intervention
+                         years_lost1(data, cause = 1, tau = tau),
+                         years_lost2(data, cause = 1, tau = tau),
+                         years_lost(data_int, cause = 1, tau = tau),     # with intervention
+                         years_lost1(data_int, cause = 1, tau = tau),
+                         years_lost2(data_int, cause = 1, tau = tau))
+                       
   
   # expected number of years without diabetes lost before \(\tau\)
-  MC_ests_T2D_2[b,] <- c(estimator(data, cause = 2, tau = tau),       # without intervention
-                       estimator(data_int, cause = 2, tau = tau))     # with intervention
+  MC_ests_T2D_2[b,] <- c(years_lost(data, cause = 2, tau = tau),       # without intervention
+                         years_lost1(data, cause = 2, tau = tau),
+                         years_lost2(data, cause = 2, tau = tau),
+                         years_lost(data_int, cause = 2, tau = tau),   # with intervention
+                         years_lost1(data_int, cause = 2, tau = tau),
+                         years_lost2(data_int, cause = 2, tau = tau))     
 }
 ```
+Checking that the three methods produce the same estimates
 
 ```{r}
-beta_true2 <- mean(MC_ests_T2D_2[,1]-MC_ests_T2D_2[,2])
-beta_true2
-var(MC_ests_T2D_2[,1]-MC_ests_T2D_2[,2])
+apply(MC_ests_T2D_1, 2, mean)
+apply(MC_ests_T2D_2, 2, mean)
+```
 
-beta_true1 <- mean(MC_ests_T2D_1[,1]-MC_ests_T2D_1[,2])
+Calculating effects
+
+```{r}
+beta_true2 <- mean(MC_ests_T2D_2[,2]-MC_ests_T2D_2[,5])
+beta_true2
+var(MC_ests_T2D_2[,2]-MC_ests_T2D_2[,5])
+
+beta_true1 <- mean(MC_ests_T2D_1[,2]-MC_ests_T2D_1[,5])
 beta_true1
-var(MC_ests_T2D_1[,1]-MC_ests_T2D_1[,2])
+var(MC_ests_T2D_1[,2]-MC_ests_T2D_1[,5])
 ```
 
 ## In a setting with time varying effects
@@ -170,12 +198,12 @@ for(b in 1:B1){
                  beta_L_D_t_prime = -0.5)
   
   # expected number of years lost before \(\tau\)
-  MC_ests_T2D_1_TV[b,] <- c(estimator(data, cause = 1, tau = tau),       # without intervention
-                            estimator(data_int, cause = 1, tau = tau))     # with intervention
+  MC_ests_T2D_1_TV[b,] <- c(years_lost1(data, cause = 1, tau = tau),       # without intervention
+                            years_lost1(data_int, cause = 1, tau = tau))     # with intervention
   
   # expected number of years without diabetes lost before \(\tau\)
-  MC_ests_T2D_2_TV[b,] <- c(estimator(data, cause = 2, tau = tau),       # without intervention
-                            estimator(data_int, cause = 2, tau = tau))     # with intervention
+  MC_ests_T2D_2_TV[b,] <- c(years_lost1(data, cause = 2, tau = tau),       # without intervention
+                            years_lost1(data_int, cause = 2, tau = tau))     # with intervention
 }
 ```
 
@@ -239,12 +267,12 @@ E_NYL_alpha <- function(N1 = 10^4, B1 = 10, alphas, eta, nu, beta_L0_D, beta_L0_
                    beta_L_D_t_prime = beta_L_D_t_prime)
     
     # expected number of years lost before \(\tau\)
-    MC_ests_1_TV[b,] <- c(estimator(data, cause = 1, tau = tau),             # without intervention
-                              estimator(data_int, cause = 1, tau = tau))     # with intervention
+    MC_ests_1_TV[b,] <- c(years_lost1(data, cause = 1, tau = tau),             # without intervention
+                              years_lost1(data_int, cause = 1, tau = tau))     # with intervention
     
     # expected number of years without diabetes before \(\tau\)
-    MC_ests_2_TV[b,] <- c(estimator(data, cause = 2, tau = tau),             # without intervention
-                              estimator(data_int, cause = 2, tau = tau))     # with intervention
+    MC_ests_2_TV[b,] <- c(years_lost1(data, cause = 2, tau = tau),             # without intervention
+                              years_lost1(data_int, cause = 2, tau = tau))     # with intervention
   }
   
   res_alpha_TV[i, 2:5] <- c(mean(MC_ests_1_TV[,1]), mean(MC_ests_1_TV[,2]),
@@ -275,12 +303,11 @@ res_alpha_TV[,1] <- alphas
 ```
 
 ```{r}
-
 plotdata <- readRDS(file = "TV_betas.rds")
 #plotdata <- data.table(res_alpha_TV)
 #plotdata[, `:=` (beta1 = DeathNoInt - DeathInt,
 #                 beta2 = T2DNoInt - T2DInt)] 
-#saveRDS(res_alpha_TV, file = "TV_betas.rds")
+#saveRDS(plotdata, file = "TV_betas.rds")
 
 colorss <- c("beta1" = "hotpink", "beta2" = "darkgreen")
 
@@ -291,7 +318,7 @@ ggplot(data = plotdata)+
 ```
 
 
-# Intervention effect estimation
+# Intervention effect estimation (FOR A DIFFERENT INTERVENTION)
 
 Gentagne estimationer:
 
@@ -339,12 +366,12 @@ for(b in 1:B){
   data0 <- simEventCox(N2, cox_fits, L0_old = data$L0, A0_old = data$A0)
   
   # expected number of years lost before \(\tau\)
-  simres_T2D_1[b,] <- c(estimator(data0, cause = 1, tau = tau),       # without intervention
-                       estimator(data_int, cause = 1, tau = tau))     # with intervention
+  simres_T2D_1[b,] <- c(years_lost(data0, cause = 1, tau = tau),       # without intervention
+                       years_lost(data_int, cause = 1, tau = tau))     # with intervention
   
   # expected number of years without diabetes before \(\tau\)
-  simres_T2D_2[b,] <- c(estimator(data0, cause = 2, tau = tau),       # without intervention
-                       estimator(data_int, cause = 2, tau = tau))     # with intervention
+  simres_T2D_2[b,] <- c(years_lost(data0, cause = 2, tau = tau),       # without intervention
+                       years_lost(data_int, cause = 2, tau = tau))     # with intervention
 }
 ```
 
