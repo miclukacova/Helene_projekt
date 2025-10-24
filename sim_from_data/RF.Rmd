@@ -1,0 +1,408 @@
+---
+title: "RF_overview"
+output: html_document
+    toc: true
+date: "2025-10-24"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(randomForestSRC)
+```
+
+
+# Fitting Random Forest Models
+
+## On Data simulated from Cox
+
+### Survival 
+
+Simulating data
+```{r}
+set.seed(375)
+beta = matrix(c(0, 0,0.5,-0.5), ncol = 2, nrow = 2)
+data <- simSurvData(N = 3000, beta = beta)
+```
+
+Fit model
+```{r} 
+#tune.nodesize(Surv(Time,Delta) ~ L0 + A0, data = data)
+obj <- rfsrc(Surv(Time, Delta == 1) ~ L0 + A0, data = data, nodesize = 10)
+```
+
+Predictions
+```{r} 
+newdata <- data.frame(L0 = c(0.5,0.5), A0 = c(1,0))
+y.pred <- predict(obj, newdata = newdata)
+```
+
+True survival function:
+```{r} 
+true_surv_death_func1 <- function(t) exp( - 0.1  * t^(1.1) * exp(sum(newdata[1,] * c(0.5,-0.5))))
+true_surv_death_func2 <- function(t) exp( - 0.1  * t^(1.1) * exp(sum(newdata[2,] * c(0.5,-0.5))))
+# Evaluate the true survival functions at these time points
+time_points <- round(y.pred$time.interest, 2)
+true_surv1 <- true_surv_death_func1(time_points)
+true_surv2 <- true_surv_death_func2(time_points)
+```
+
+Visualizing fit
+```{r} 
+par(mfrow = c(1,1), cex.axis = 2.0, cex.lab = 2.0, cex.main = 2.0, mar = c(6.0,6,1,1), mgp = c(4, 1, 0))
+plot(round(y.pred$time.interest,2),y.pred$survival[1,], type="l", xlab="Time (Year)",
+     ylab="Survival", col=1, lty=1, lwd=2)
+lines(round(y.pred$time.interest,2), y.pred$survival[2,], col=2, lty=1, lwd=2)
+# Add lines for the true survival functions
+lines(time_points, true_surv1, col=1, lty=2, lwd=2)  # Dashed line for func1
+lines(time_points, true_surv2, col=2, lty=2, lwd=2)  # Dot-dashed line for func2
+legend("topright", 
+       legend=c("A0=1 (Predicted)", "A0=0 (Predicted)", "A0=1 (True)", "A0=0 (True)"), 
+       col=c(1, 2, 1, 2), 
+       lty=c(1, 1, 2, 2), 
+       cex=0.75, 
+       lwd=2)
+```
+
+
+### Competing Risk
+
+Simulate data
+```{r}
+set.seed(373)
+beta = matrix(c(0.5,-1,-0.5,0.5,0,0.5), ncol = 3, nrow = 2)
+data <- simCRdata(N = 3000, beta = beta)
+```
+
+Fit RSF model
+```{r}
+#tune.nodesize(Surv(Time,Delta) ~ L0 + A0, data = data)
+RF <- rfsrc(Surv(Time, Delta) ~ L0 + A0, data = data, nodesize = 150)
+```
+
+New Data
+```{r}
+newdata <- data.frame(L0 = c(0.5,0.5), A0 = c(1,0))
+y.pred <- predict(RF, newdata = newdata)
+```
+
+True CHF
+```{r}
+true_chf_func1 <- function(t, cov)  0.1  * t^(1.1) * exp(sum(cov * c(-0.5,0.5)))
+true_chf_func2 <- function(t, cov)  0.1  * t^(1.1) * exp(sum(cov * c(0,0.5)))
+
+# Evaluate the true survival functions at time points
+time_points <- y.pred$time.interest
+true_chf11 <- true_chf_func1(time_points, newdata[1,])
+true_chf12 <- true_chf_func1(time_points, newdata[2,])
+true_chf21 <- true_chf_func2(time_points, newdata[1,])
+true_chf22 <- true_chf_func2(time_points, newdata[2,])
+```
+
+Fit Cox models
+```{r}
+cox1 <- coxph(Surv(Time, Delta == 1) ~ L0 + A0, data = data)
+cox2 <- coxph(Surv(Time, Delta == 2) ~ L0 + A0, data = data)
+basehazz1 <- basehaz(cox1, centered = TRUE)
+basehazz2 <- basehaz(cox2, centered = TRUE)
+cox_term1 <- exp(predict(cox1, newdata=newdata, type="lp"))
+cox_term2 <- exp(predict(cox2, newdata=newdata, type="lp"))
+cum_int1 <- outer(basehazz1[['hazard']], cox_term1, "*")
+cum_int2 <- outer(basehazz2[['hazard']], cox_term2, "*")
+```
+
+Plot:
+```{r}
+par(mfrow = c(1,2), cex.axis = 2.0, cex.lab = 2.0, cex.main = 2.0, mar = c(6.0,6,1,1), mgp = c(4, 1, 0))
+# Process 1
+plot(time_points,y.pred$chf[1,,1], type="l", xlab="Time",
+     ylab="Process 1 CHF", col=1, lty=1, lwd=2, xlim = c(0,15))
+lines(time_points, y.pred$chf[2,,1], col=1, lty=2, lwd=2)
+# Add lines for the true survival functions
+lines(time_points, true_chf11, col=2, lty=1, lwd=2)  
+lines(time_points, true_chf12, col=2, lty=2, lwd=2)  
+lines(basehazz1$time, cum_int1[,1], col=3, lty=1, lwd=2)
+lines(basehazz2$time, cum_int1[,2], col=3, lty=2, lwd=2)
+
+# Process 2
+plot(time_points,y.pred$chf[1,,2], type="l", xlab="Time",
+     ylab="Process 2 CHF", col=1, lty=1, lwd=2, xlim = c(0,15))
+lines(time_points, y.pred$chf[2,,2], col=1, lty=2, lwd=2)
+# Add lines for the true survival functions
+lines(time_points, true_chf21, col=2, lty=1, lwd=2)  
+lines(time_points, true_chf22, col=2, lty=2, lwd=2) 
+lines(basehazz2$time, cum_int2[,1], col=3, lty=1, lwd=2)
+lines(basehazz2$time, cum_int2[,2], col=3, lty=2, lwd=2)
+
+legend("topright", 
+       legend = c("RF CHF A0 = 1", "RF CHF A0 = 0", "True CHF A0 = 1", "True CHF A0 = 0",
+                  "Cox CHF A0 = 1", "Cox CHF A0 = 0"),
+       col = c(1, 1, 2, 2, 3, 3),
+       lty = c(1, 2, 1, 2, 1, 2),
+       lwd = 2,
+       cex = 0.75)
+```
+
+### General Event History
+
+Simulate data
+```{r}
+data <- simTreatment(3000)
+data <- IntFormatData(data, N_cols = c(5,6))
+```
+
+We might be able to use this package
+```{r}
+library(recforest)
+```
+
+Train a recforest model
+```{r}
+#set.seed(1234)
+#trained_forest <- train_forest(
+#  data = data,
+#  id_var = "ID",
+#  covariates = c("L0"),
+#  time_vars = c("tstart", "tstop"),
+#  death_var = "death",
+#  event = c("A", "L"),
+#  n_trees = 3,
+#  n_bootstrap = round(2 * nrow(data) / 3),
+#  mtry = 2,
+#  minsplit = 3,
+#  nodesize = 15,
+#  method = "NAa",
+#  min_score = 5,
+#  max_nodes = 20,
+#  seed = 111
+#)
+```
+
+## On Data not from Cox
+
+### Survival 
+
+Yet to be implemented...
+
+### Competing Risk
+
+Yet to be implemented...
+
+### General Event History
+
+Yet to be implemented...
+
+# Simulating using Random Forest Models
+
+## On Data simulated from Cox
+
+### Survival 
+
+Simulate data
+```{r}
+set.seed(373)
+beta = matrix(c(1, 0,0.5,1), ncol = 2, nrow = 2)
+data <- simSurvData(N = 1000, beta = beta, cens = 0)
+```
+
+Fit model
+```{r}
+#tune.nodesize(Surv(Time,Delta) ~ L0 + A0, data = data)
+RF_fit <- rfsrc(Surv(Time, Delta) ~ L0 + A0, data = data, nodesize = 40)
+```
+
+Simulate new data
+```{r}
+new_data <- simEventRF(2*10^4, RF_fit, L0_old = data$L0, A0_old = data$A0,
+                       n_event_max = 1, term_events = 1)
+covars <- data.frame(L0 = c(0.5,0.5), A0 = c(1,0))
+```
+
+Fit Cox models
+```{r}
+cox1 <- coxph(Surv(Time, Delta == 1) ~ L0 + A0, data = new_data)
+basehazz1 <- basehaz(cox1, centered = TRUE)
+cox_term1 <- exp(predict(cox1, newdata=covars, type="lp"))
+cum_int1 <- outer(basehazz1[['hazard']], cox_term1, "*")
+```
+
+Evaluate the true survival functions at these time points
+```{r}
+true_chf_func1 <- function(t) 0.1  * t^(1.1) * exp(sum(covars[1,] * c(0.5,1)))
+true_chf_func2 <- function(t) 0.1  * t^(1.1) * exp(sum(covars[2,] * c(0.5,1)))
+time_points <- basehazz1[['time']]
+true_chf1 <- true_chf_func1(time_points)
+true_chf2 <- true_chf_func2(time_points)
+```
+
+Plot
+```{r}
+par(mfrow = c(1,1), cex.axis = 1.0, cex.lab = 1.0, cex.main = 1.0, mar = c(6.0,6,1,1), mgp = c(4, 1, 0))
+plot(time_points, cum_int1[,1], type="l", xlab="Time (Year)",
+     ylab="CHF", col=1, lty=1, lwd=2, xlim = c(0,quantile(new_data$Time, 0.9)))
+lines(time_points, cum_int1[,2], col=2, lty=1, lwd=2)
+# Add lines for the true survival functions
+lines(time_points, true_chf1, col=1, lty=3, lwd=2)
+lines(time_points, true_chf2, col=2, lty=3, lwd=2)
+legend("topright",
+       legend=c("A0=1 (Predicted)", "A0=0 (Predicted)", "A0=1 (True)", "A0=0 (True)"),
+       col=c(1, 2, 1, 2),
+       lty=c(1, 1, 3, 3),
+       cex=0.75,
+       lwd=2)
+```
+
+
+### Competing Risk
+
+Simulate data
+```{r}
+set.seed(373)
+beta = matrix(c(0.5,-1,-0.5,0.5,0,0.5), ncol = 3, nrow = 2)
+data <- simCRdata(N = 3000, beta = beta)
+```
+
+
+Fit RSF model
+```{r}
+#tune.nodesize(Surv(Time,Delta) ~ L0 + A0, data = data)
+RF_fit <- rfsrc(Surv(Time, Delta) ~ L0 + A0, data = data, nodesize = 150)
+```
+
+New Data
+```{r}
+new_data <- simEventRF(10^4, RF_fit, L0_old = data$L0, A0_old = data$A0,
+           n_event_max = c(1,1), term_events = c(1,2))
+```
+
+Fit Cox models
+```{r}
+cox1 <- coxph(Surv(Time, Delta == 1) ~ L0 + A0, data = new_data)
+cox2 <- coxph(Surv(Time, Delta == 2) ~ L0 + A0, data = new_data)
+basehazz1 <- basehaz(cox1, centered = TRUE)
+basehazz2 <- basehaz(cox2, centered = TRUE)
+cox_term1 <- exp(predict(cox1, newdata=covars, type="lp"))
+cox_term2 <- exp(predict(cox2, newdata=covars, type="lp"))
+cum_int1 <- outer(basehazz1[['hazard']], cox_term1, "*")
+cum_int2 <- outer(basehazz2[['hazard']], cox_term2, "*")
+```
+
+True CHF
+```{r}
+true_chf_func1 <- function(t, cov)  0.1  * t^(1.1) * exp(sum(cov * c(-0.5,0.5)))
+true_chf_func2 <- function(t, cov)  0.1  * t^(1.1) * exp(sum(cov * c(0,0.5)))
+
+# Evaluate the true survival functions at time points
+times <- basehazz1[['time']]
+true_chf11 <- true_chf_func1(times, covars[1,])
+true_chf12 <- true_chf_func1(times, covars[2,])
+true_chf21 <- true_chf_func2(times, covars[1,])
+true_chf22 <- true_chf_func2(times, covars[2,])
+```
+
+Plot
+```{r}
+par(mfrow = c(1,2), cex.axis = 1.0, cex.lab = 1.0, cex.main = 1.0, mar = c(6.0,6,1,1), mgp = c(4, 1, 0))
+# Process 1
+plot(times, true_chf11, type="l", xlab="Time",
+     ylab="Process 1 CHF", col=1, lty=1, lwd=2, xlim = c(0,quantile(new_data$Time, 0.95)))
+lines(times, true_chf12, col=1, lty=2, lwd=2)
+lines(times, cum_int1[,1], col=2, lty=1, lwd=2)
+lines(times, cum_int1[,2], col=2, lty=2, lwd=2)
+
+# Process 2
+plot(times,true_chf21, type="l", xlab="Time",
+     ylab="Process 2 CHF", col=1, lty=1, lwd=2, xlim = c(0,quantile(new_data$Time, 0.95)))
+lines(times, true_chf22, col=1, lty=2, lwd=2)
+lines(times, cum_int2[,1], col=2, lty=1, lwd=2)
+lines(times, cum_int2[,2], col=2, lty=2, lwd=2)
+
+legend("topright",
+       legend = c("True CHF A0 = 1", "True CHF A0 = 0",
+                  "Cox CHF A0 = 1", "Cox CHF A0 = 0"),
+       col = c(1, 1, 2, 2),
+       lty = c(1, 2, 1, 2),
+       lwd = 2,
+       cex = 0.75)
+
+```
+
+### General Event History
+
+Yet to be implemented...
+
+## On Data not from Cox
+
+Yet to be implemented...
+
+### Survival 
+
+Yet to be implemented...
+
+### Competing Risk
+
+Yet to be implemented...
+
+### General Event History
+
+Yet to be implemented...
+
+# Comparing Simulation Procedures
+
+We interested in how well the simulated data aligns with observed data. we will do this by simulating large data sets using both procedures and approximating the cumulative incidence function in a grid of points $t_1,\ldots, t_M$ using Monte Carlo methods. We approximate the cumulative incidence function for cause $j$ as
+
+$$\hat{f}_j(t) = \hat{P}(T \leq t, \Delta = j) = \frac{1}{N}\sum_{i =1}^N 1(T_i \leq t , \Delta = j)$$
+When we have calculated the approximated CIF in the grid of time points, we can sum the squared differences of the true CIF and the approximated CIF, thereby defining the metric:
+
+$$Q_j = \sum_{i=1}^M \left(\hat{f}_j(t_i) - f_j(t_i)\right)^2$$
+As a measure of how well our simulated data aligns with the underlying data. 
+
+## On Data from Proportional Hazard Model 
+
+We simulate the "observed" data
+```{r}
+set.seed(373)
+beta = matrix(c(0.5,-1,-0.5,0.5,0,0.5), ncol = 3, nrow = 2)
+data <- simCRdata(N = 3000, beta = beta, cens = 0)
+```
+
+Fit Cox models
+```{r}
+cox1 <- coxph(Surv(Time, Delta == 1) ~ L0 + A0, data = data)
+cox2 <- coxph(Surv(Time, Delta == 2) ~ L0 + A0, data = data)
+cox_fits <- list("Process 1" = cox1, "Process 2" = cox2)
+```
+
+Simulate 10 large datasets using `simEventCox`
+```{r}
+for(i in 1:10){
+  new_data <- simEventCox(10^4, cox_fits, L0_old = data$L0, A0_old = data$A0)
+}
+```
+
+Fit RF
+```{r}
+RF_fit <- randomForestSRC::rfsrc(Surv(Time, Delta) ~ L0 + A0, data = data, nodesize = 150)
+```
+
+Simulate 10 large datasets using `simEventRF`
+```{r}
+for(i in 1:10){
+  new_data2 <- simEventRF(10^4, RF_fit, L0_old = data$L0, A0_old = data$A0, term_events = c(1,2))
+}
+```
+
+
+```{r}
+Q_cox1 <- sum((f_hat_cox1 - f_true1)^2)
+Q_cox2 <- sum((f_hat_cox2 - f_true2)^2)
+Q_RF1 <- sum((f_hat_RF1 - f_true1)^2)
+Q_RF2 <- sum((f_hat_RF2 - f_true2)^2)
+```
+
+
+## On Data not from Proportional Hazard Model
+
+Yet to be implemented...
