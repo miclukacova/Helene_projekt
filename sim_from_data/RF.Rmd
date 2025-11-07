@@ -11,6 +11,10 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r}
 library(randomForestSRC)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(gridExtra)
 ```
 
 
@@ -184,11 +188,149 @@ Train a recforest model
 
 ### Survival 
 
-Yet to be implemented...
+```{r}
+beta <- matrix(c(0, 0, 0, 0, -0.5 , 1, 0, 0), ncol = 2)
+beta_TV <- matrix(c(0, 0, 0, 0, 0.5 , -2, 0, 0), ncol = 2)
+t_prime <- 2
+data <- simEventTV(4000, beta = beta, term_deltas = c(0,1), tv_eff = beta_TV, t_prime = t_prime)
+```
+
+Fit model
+```{r} 
+#tune.nodesize(Surv(Time,Delta) ~ L0 + A0, data = data)
+obj <- rfsrc(Surv(Time, Delta) ~ L0 + A0, data = data, nodesize = 10)
+```
+
+Predictions
+```{r} 
+newdata <- data.frame(L0 = c(0.5,0.5), A0 = c(1,0))
+y.pred <- predict(obj, newdata = newdata)
+```
+
+True survival function:
+```{r} 
+true_surv_death_func1 <- function(t) {
+  if(t <= t_prime) return(exp( - 0.1  * t^(1.1) * exp(sum(newdata[1,] * c(-0.5,1)))))
+  exp( - (0.1  * t_prime^(1.1) * exp(sum(newdata[1,] * c(-0.5,1))) + 
+          0.1  * t^(1.1) * exp(sum(newdata[1,] * c(0,-1))) -
+          0.1  * t_prime^(1.1) * exp(sum(newdata[1,] * c(0,-1)))))
+}
+true_surv_death_func2 <- function(t) {
+  if(t <= t_prime) return(exp( - 0.1  * t^(1.1) * exp(sum(newdata[2,] * c(-0.5,1)))))
+  exp( - (0.1  * t_prime^(1.1) * exp(sum(newdata[2,] * c(-0.5,1))) + 
+          0.1  * t^(1.1) * exp(sum(newdata[2,] * c(0,-1))) -
+          0.1  * t_prime^(1.1) * exp(sum(newdata[2,] * c(0,-1)))))
+}
+# Evaluate the true survival functions at these time points
+time_points <- y.pred$time.interest
+true_surv1 <- sapply(time_points, FUN = true_surv_death_func1)
+true_surv2 <- sapply(time_points, FUN = true_surv_death_func2)
+```
+
+Visualizing fit
+```{r} 
+par(mfrow = c(1,1), cex.axis = 2.0, cex.lab = 2.0, cex.main = 2.0, mar = c(6.0,6,1,1), mgp = c(4, 1, 0))
+plot(round(y.pred$time.interest,2),y.pred$survival[1,], type="l", xlab="Time (Year)",
+     ylab="Survival", col=1, lty=1, lwd=2, xlim = c(0,5))
+lines(round(y.pred$time.interest,2), y.pred$survival[2,], col=2, lty=1, lwd=2)
+# Add lines for the true survival functions
+lines(time_points, true_surv1, col=1, lty=2, lwd=2)  # Dashed line for func1
+lines(time_points, true_surv2, col=2, lty=2, lwd=2)  # Dot-dashed line for func2
+legend("topright", 
+       legend=c("A0=1 (Predicted)", "A0=0 (Predicted)", "A0=1 (True)", "A0=0 (True)"), 
+       col=c(1, 2, 1, 2), 
+       lty=c(1, 1, 2, 2), 
+       cex=0.75, 
+       lwd=2)
+```
 
 ### Competing Risk
 
-Yet to be implemented...
+```{r}
+beta <- matrix(c(0, 0, 0, 0, 0, -0.5 , 0.5, 0, 0, 0, 0.5, -0.5, 0, 0, 0), ncol = 3)
+beta_TV <- matrix(c(0, 0, 0, 0, 0, 1 , -1.5, 0, 0, 0, -1, 1, 0, 0, 0), ncol = 3)
+t_prime <- 2
+data <- simEventTV(3000, beta = beta, term_deltas = c(0,1,2), tv_eff = beta_TV, t_prime = t_prime)
+```
+
+Fit RSF model
+```{r}
+#tune.nodesize(Surv(Time,Delta) ~ L0 + A0, data = data)
+RF <- rfsrc(Surv(Time, Delta) ~ L0 + A0, data = data, nodesize = 150)
+```
+
+New Data
+```{r}
+newdata <- data.frame(L0 = c(0.5,0.5), A0 = c(1,0))
+y.pred <- predict(RF, newdata = newdata)
+```
+
+True CHF
+```{r}
+true_chf_func1 <- function(t, cov) {
+  if(t <= t_prime) return(0.1  * t^(1.1) * exp(sum(cov * c(-0.5,0.5))))
+  0.1  * t_prime^(1.1) * exp(sum(cov * c(-0.5,0.5))) + 
+  0.1  * t^(1.1) * exp(sum(cov * c(0.5,-1))) -
+  0.1  * t_prime^(1.1) * exp(sum(cov * c(0.5,-1)))
+}
+true_chf_func2 <- function(t, cov) {
+  if(t <= t_prime) return(0.1  * t^(1.1) * exp(sum(cov * c(0.5,-0.5))))
+  0.1  * t_prime^(1.1) * exp(sum(cov * c(0.5,-0.5))) + 
+  0.1  * t^(1.1) * exp(sum(cov * c(-0.5,0.5))) -
+  0.1  * t_prime^(1.1) * exp(sum(cov * c(-0.5,0.5)))
+}
+
+# Evaluate the true CIF functions at time points
+time_points <- y.pred$time.interest
+true_chf11 <- sapply(time_points, FUN = function(t) true_chf_func1(t, newdata[1,]))
+true_chf12 <- sapply(time_points, FUN = function(t) true_chf_func1(t, newdata[2,]))
+true_chf21 <- sapply(time_points, FUN = function(t) true_chf_func2(t, newdata[1,]))
+true_chf22 <- sapply(time_points, FUN = function(t) true_chf_func2(t, newdata[2,]))
+```
+
+Fit Cox models
+```{r}
+cox1 <- coxph(Surv(Time, Delta == 1) ~ L0 + A0, data = data)
+cox2 <- coxph(Surv(Time, Delta == 2) ~ L0 + A0, data = data)
+basehazz1 <- basehaz(cox1, centered = TRUE)
+basehazz2 <- basehaz(cox2, centered = TRUE)
+cox_term1 <- exp(predict(cox1, newdata=newdata, type="lp"))
+cox_term2 <- exp(predict(cox2, newdata=newdata, type="lp"))
+cum_int1 <- outer(basehazz1[['hazard']], cox_term1, "*")
+cum_int2 <- outer(basehazz2[['hazard']], cox_term2, "*")
+```
+
+Plot:
+```{r}
+par(mfrow = c(1,2), cex.axis = 2.0, cex.lab = 2.0, cex.main = 2.0, mar = c(6.0,6,1,1), mgp = c(4, 1, 0))
+# Process 1
+plot(time_points,y.pred$chf[1,,1], type="l", xlab="Time",
+     ylab="Process 1 CHF", col=1, lty=1, lwd=2, xlim = c(0,5), ylim = c(0,1))
+lines(time_points, y.pred$chf[2,,1], col=1, lty=2, lwd=2)
+# Add lines for the true survival functions
+lines(time_points, true_chf11, col=2, lty=1, lwd=2)  
+lines(time_points, true_chf12, col=2, lty=2, lwd=2)  
+lines(basehazz1$time, cum_int1[,1], col=3, lty=1, lwd=2)
+lines(basehazz2$time, cum_int1[,2], col=3, lty=2, lwd=2)
+
+# Process 2
+plot(time_points,y.pred$chf[1,,2], type="l", xlab="Time",
+     ylab="Process 2 CHF", col=1, lty=1, lwd=2, xlim = c(0,5), ylim = c(0,1))
+lines(time_points, y.pred$chf[2,,2], col=1, lty=2, lwd=2)
+# Add lines for the true survival functions
+lines(time_points, true_chf21, col=2, lty=1, lwd=2)  
+lines(time_points, true_chf22, col=2, lty=2, lwd=2) 
+lines(basehazz2$time, cum_int2[,1], col=3, lty=1, lwd=2)
+lines(basehazz2$time, cum_int2[,2], col=3, lty=2, lwd=2)
+
+legend("topright", 
+       legend = c("RF CHF A0 = 1", "RF CHF A0 = 0", "True CHF A0 = 1", "True CHF A0 = 0",
+                  "Cox CHF A0 = 1", "Cox CHF A0 = 0"),
+       col = c(1, 1, 2, 2, 3, 3),
+       lty = c(1, 2, 1, 2, 1, 2),
+       lwd = 2,
+       cex = 0.75)
+```
 
 ### General Event History
 
@@ -329,29 +471,9 @@ legend("topright",
 
 ```
 
-### General Event History
-
-Yet to be implemented...
-
-## On Data not from Cox
-
-Yet to be implemented...
-
-### Survival 
-
-Yet to be implemented...
-
-### Competing Risk
-
-Yet to be implemented...
-
-### General Event History
-
-Yet to be implemented...
-
 # Comparing Simulation Procedures
 
-We interested in how well the simulated data aligns with observed data. we will do this by simulating large data sets using both procedures and approximating the cumulative incidence function in a grid of points $t_1,\ldots, t_M$ using Monte Carlo methods. We approximate the cumulative incidence function for cause $j$ as
+We interested in how well the simulated data from respectively `simCRdata` and `simEventRF` aligns with "observed" data. We will investigate this by simulating large data sets using both procedures and approximating the cumulative incidence function in a grid of points $t_1,\ldots, t_M$ using Monte Carlo methods. We approximate the cumulative incidence function for cause $j$ as
 
 $$\hat{f}_j(t) = \hat{P}(T \leq t, \Delta = j) = \frac{1}{N}\sum_{i =1}^N 1(T_i \leq t , \Delta = j)$$
 When we have calculated the approximated CIF in the grid of time points, we can sum the squared differences of the true CIF and the approximated CIF, thereby defining the metric:
@@ -368,6 +490,34 @@ beta = matrix(c(0.5,-1,-0.5,0.5,0,0.5), ncol = 3, nrow = 2)
 data <- simCRdata(N = 3000, beta = beta, cens = 0)
 ```
 
+**Approximating the true CIFs**
+
+We simulate data from the true distribution:
+```{r}
+N <- 10^5
+true_data <- list()
+for(i in 1:10){
+  true_data[[i]] <- simCRdata(N = N, beta = beta, cens = 0)
+}
+true_data <- dplyr::bind_rows(true_data)
+```
+
+We approximate the true cumulative incidence function using the simulated data
+```{r}
+tis <- seq(0.1,5, length.out = 10)
+CIF_true1 <- numeric(10)
+CIF_true2 <- numeric(10)
+i <- 1
+
+for(ti in tis){
+  CIF_true1[i] <- mean(true_data[(Time <= ti) & Delta == 1, Time])
+  CIF_true2[i] <- mean(true_data[(Time <= ti) & Delta == 2, Time])
+  i <- i + 1 
+}
+```
+
+**Approximating the CIFs using data genereted by Cox**
+
 Fit Cox models
 ```{r}
 cox1 <- coxph(Surv(Time, Delta == 1) ~ L0 + A0, data = data)
@@ -377,10 +527,28 @@ cox_fits <- list("Process 1" = cox1, "Process 2" = cox2)
 
 Simulate 10 large datasets using `simEventCox`
 ```{r}
+N <- 3*10^4
+new_data <- list()
 for(i in 1:10){
-  new_data <- simEventCox(10^4, cox_fits, L0_old = data$L0, A0_old = data$A0)
+  new_data[[i]] <- simEventCox(N, cox_fits, L0_old = data$L0, A0_old = data$A0)
+}
+new_data <- dplyr::bind_rows(new_data)
+```
+
+Approximate the cumulative incidence function using the Cox data
+```{r}
+CIF_cox1 <- numeric(10)
+CIF_cox2 <- numeric(10)
+i <- 1
+
+for(ti in tis){
+  CIF_cox1[i] <- mean(new_data[(Time <= ti) & Delta == 1, Time])
+  CIF_cox2[i] <- mean(new_data[(Time <= ti) & Delta == 2, Time])
+  i <- i + 1 
 }
 ```
+
+**Approximating the CIFs using data genereted by Cox**
 
 Fit RF
 ```{r}
@@ -389,20 +557,214 @@ RF_fit <- randomForestSRC::rfsrc(Surv(Time, Delta) ~ L0 + A0, data = data, nodes
 
 Simulate 10 large datasets using `simEventRF`
 ```{r}
+N <- 2*10^4
+new_data2 <- list()
 for(i in 1:10){
-  new_data2 <- simEventRF(10^4, RF_fit, L0_old = data$L0, A0_old = data$A0, term_events = c(1,2))
+  print(i)
+  new_data2[[i]] <- simEventRF(N, RF_fit, L0_old = data$L0, A0_old = data$A0, term_events = c(1,2))
+}
+new_data2 <- dplyr::bind_rows(new_data2)
+```
+Approximate the cumulative incidence function using the RF data
+```{r}
+CIF_RF1 <- numeric(10)
+CIF_RF2 <- numeric(10)
+i <- 1
+
+for(ti in tis){
+  CIF_RF1[i] <- mean(new_data2[(Time <= ti) & Delta == 1, Time])
+  CIF_RF2[i] <- mean(new_data2[(Time <= ti) & Delta == 2, Time])
+  i <- i + 1 
 }
 ```
 
+**Calculating the Qs**
 
 ```{r}
-Q_cox1 <- sum((f_hat_cox1 - f_true1)^2)
-Q_cox2 <- sum((f_hat_cox2 - f_true2)^2)
-Q_RF1 <- sum((f_hat_RF1 - f_true1)^2)
-Q_RF2 <- sum((f_hat_RF2 - f_true2)^2)
+Q_cox1 <- sum((CIF_cox1 - CIF_true1)^2)
+Q_cox2 <- sum((CIF_cox2 - CIF_true2)^2)
+Q_RF1 <- sum((CIF_RF1 - CIF_true1)^2)
+Q_RF2 <- sum((CIF_RF2 - CIF_true2)^2)
+print(Q_cox1); print(Q_RF1)
+print(Q_cox2); print(Q_RF2)
+```
+
+```{r}
+df1 <- data.frame(
+  tis = tis,
+  True = CIF_true1,
+  Cox = CIF_cox1 - CIF_true1,
+  RF = CIF_RF1 - CIF_true1
+) %>%
+  pivot_longer(cols = c(Cox, RF), names_to = "Model", values_to = "CIF")
+
+df2 <- data.frame(
+  tis = tis,
+  Cox = CIF_cox2 - CIF_true2,
+  RF = CIF_RF2 - CIF_true2
+) %>%
+  pivot_longer(cols = c(Cox, RF), names_to = "Model", values_to = "CIF")
+
+p1 <- ggplot(df1, aes(x = tis, y = CIF, color = Model)) +
+  geom_line(linewidth = 1.2) +
+  ylab("CIF") + xlab("Time") +
+  theme_bw() +
+  ggtitle("Process 1") +
+  scale_color_manual(values = c("black", "red", "green4"))
+
+p2 <- ggplot(df2, aes(x = tis, y = CIF, color = Model)) +
+  geom_line(linewidth = 1.1) +
+  ylab("CIF") + xlab("Time") +
+  theme_bw() +
+  ggtitle("Process 2") +
+  scale_color_manual(values = c("black", "red", "green4"))
+
+gridExtra::grid.arrange(p1,p2, nrow = 1)
 ```
 
 
 ## On Data not from Proportional Hazard Model
 
-Yet to be implemented...
+We simulate the "observed" data
+```{r}
+beta <- matrix(c(-0.5 , 0.5, 0, 0, 0.5, -0.5, 0, 0), ncol = 2)
+beta_TV <- matrix(c(1 , -1.5, 0, 0, -1, 1, 0, 0), ncol = 2)
+t_prime <- 2
+data <- simEventTV(3000, beta = beta, term_deltas = c(0,1), tv_eff = beta_TV, 
+                   t_prime = t_prime)
+data[, Delta := Delta + (Delta == 0) * 2]
+```
+
+**Approximating the true CIFs**
+
+We simulate data from the true distribution:
+```{r}
+N <- 10^5
+true_data <- list()
+for(i in 1:10){
+  true_data[[i]] <- simEventTV(N, beta = beta, term_deltas = c(0,1), tv_eff = beta_TV, 
+                               t_prime = t_prime)
+}
+true_data <- dplyr::bind_rows(true_data)
+true_data[, Delta := Delta + (Delta == 0) * 2]
+```
+
+We approximate the true cumulative incidence function using the simulated data
+```{r}
+tis <- seq(0.1,5, length.out = 10)
+CIF_true1 <- numeric(10)
+CIF_true2 <- numeric(10)
+i <- 1
+
+for(ti in tis){
+  CIF_true1[i] <- mean(true_data[(Time <= ti) & Delta == 1, Time])
+  CIF_true2[i] <- mean(true_data[(Time <= ti) & Delta == 2, Time])
+  i <- i + 1 
+}
+```
+
+**Approximating the CIFs using data genereted by Cox**
+
+Fit Cox models
+```{r}
+cox1 <- coxph(Surv(Time, Delta == 1) ~ L0 + A0, data = data)
+cox2 <- coxph(Surv(Time, Delta == 2) ~ L0 + A0, data = data)
+cox_fits <- list("Process 1" = cox1, "Process 2" = cox2)
+```
+
+Simulate 10 large datasets using `simEventCox`
+```{r}
+N <- 10^5
+new_data <- list()
+for(i in 1:10){
+  new_data[[i]] <- simEventCox(N, cox_fits, L0_old = data$L0, A0_old = data$A0)
+}
+new_data <- dplyr::bind_rows(new_data)
+```
+
+Approximate the cumulative incidence function using the Cox data
+```{r}
+CIF_cox1 <- numeric(10)
+CIF_cox2 <- numeric(10)
+i <- 1
+
+for(ti in tis){
+  CIF_cox1[i] <- mean(new_data[(Time <= ti) & Delta == 1, Time])
+  CIF_cox2[i] <- mean(new_data[(Time <= ti) & Delta == 2, Time])
+  i <- i + 1 
+}
+```
+
+**Approximating the CIFs using data genereted by Cox**
+
+Fit RF
+```{r}
+RF_fit <- randomForestSRC::rfsrc(Surv(Time, Delta) ~ L0 + A0, data = data, nodesize = 150)
+```
+
+Simulate 10 large datasets using `simEventRF`
+```{r}
+N <- 1.5*10^4
+new_data2 <- list()
+for(i in 1:10){
+  print(i)
+  new_data2[[i]] <- simEventRF(N, RF_fit, L0_old = data$L0, A0_old = data$A0, term_events = c(1,2))
+}
+new_data2 <- dplyr::bind_rows(new_data2)
+```
+Approximate the cumulative incidence function using the RF data
+```{r}
+CIF_RF1 <- numeric(10)
+CIF_RF2 <- numeric(10)
+i <- 1
+
+for(ti in tis){
+  CIF_RF1[i] <- mean(new_data2[(Time <= ti) & Delta == 1, Time])
+  CIF_RF2[i] <- mean(new_data2[(Time <= ti) & Delta == 2, Time])
+  i <- i + 1 
+}
+```
+
+**Calculating the Qs**
+
+```{r}
+Q_cox1 <- sum((CIF_cox1 - CIF_true1)^2)
+Q_cox2 <- sum((CIF_cox2 - CIF_true2)^2)
+Q_RF1 <- sum((CIF_RF1 - CIF_true1)^2)
+Q_RF2 <- sum((CIF_RF2 - CIF_true2)^2)
+print(Q_cox1); print(Q_RF1)
+print(Q_cox2); print(Q_RF2)
+```
+
+```{r}
+df1 <- data.frame(
+  tis = tis,
+  True = CIF_true1,
+  Cox = CIF_cox1 - CIF_true1,
+  RF = CIF_RF1 - CIF_true1
+) %>%
+  pivot_longer(cols = c(Cox, RF), names_to = "Model", values_to = "CIF")
+
+df2 <- data.frame(
+  tis = tis,
+  Cox = CIF_cox2 - CIF_true2,
+  RF = CIF_RF2 - CIF_true2
+) %>%
+  pivot_longer(cols = c(Cox, RF), names_to = "Model", values_to = "CIF")
+
+p1 <- ggplot(df1, aes(x = tis, y = CIF, color = Model)) +
+  geom_line(linewidth = 1.2) +
+  ylab("CIF Diff") + xlab("Time") +
+  theme_bw() +
+  ggtitle("Process 1") +
+  scale_color_manual(values = c("red", "green4"))
+
+p2 <- ggplot(df2, aes(x = tis, y = CIF, color = Model)) +
+  geom_line(linewidth = 1.1) +
+  ylab("CIF Diff") + xlab("Time") +
+  theme_bw() +
+  ggtitle("Process 2") +
+  scale_color_manual(values = c( "red", "green4"))
+
+gridExtra::grid.arrange(p1,p2, nrow = 1)
+```
