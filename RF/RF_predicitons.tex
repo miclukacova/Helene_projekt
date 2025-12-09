@@ -1,0 +1,562 @@
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+\documentclass[
+]{article}
+\usepackage{xcolor}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\setcounter{secnumdepth}{-\maxdimen} % remove section numbering
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math} % this also loads fontspec
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+\usepackage{lmodern}
+\ifPDFTeX\else
+  % xetex/luatex font selection
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+\usepackage{color}
+\usepackage{fancyvrb}
+\newcommand{\VerbBar}{|}
+\newcommand{\VERB}{\Verb[commandchars=\\\{\}]}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{commandchars=\\\{\}}
+% Add ',fontsize=\small' for more characters per line
+\usepackage{framed}
+\definecolor{shadecolor}{RGB}{248,248,248}
+\newenvironment{Shaded}{\begin{snugshade}}{\end{snugshade}}
+\newcommand{\AlertTok}[1]{\textcolor[rgb]{0.94,0.16,0.16}{#1}}
+\newcommand{\AnnotationTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\newcommand{\AttributeTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{#1}}
+\newcommand{\BaseNTok}[1]{\textcolor[rgb]{0.00,0.00,0.81}{#1}}
+\newcommand{\BuiltInTok}[1]{#1}
+\newcommand{\CharTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
+\newcommand{\CommentTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textit{#1}}}
+\newcommand{\CommentVarTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\newcommand{\ConstantTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{#1}}
+\newcommand{\ControlFlowTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{\textbf{#1}}}
+\newcommand{\DataTypeTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{#1}}
+\newcommand{\DecValTok}[1]{\textcolor[rgb]{0.00,0.00,0.81}{#1}}
+\newcommand{\DocumentationTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\newcommand{\ErrorTok}[1]{\textcolor[rgb]{0.64,0.00,0.00}{\textbf{#1}}}
+\newcommand{\ExtensionTok}[1]{#1}
+\newcommand{\FloatTok}[1]{\textcolor[rgb]{0.00,0.00,0.81}{#1}}
+\newcommand{\FunctionTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{\textbf{#1}}}
+\newcommand{\ImportTok}[1]{#1}
+\newcommand{\InformationTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\newcommand{\KeywordTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{\textbf{#1}}}
+\newcommand{\NormalTok}[1]{#1}
+\newcommand{\OperatorTok}[1]{\textcolor[rgb]{0.81,0.36,0.00}{\textbf{#1}}}
+\newcommand{\OtherTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{#1}}
+\newcommand{\PreprocessorTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textit{#1}}}
+\newcommand{\RegionMarkerTok}[1]{#1}
+\newcommand{\SpecialCharTok}[1]{\textcolor[rgb]{0.81,0.36,0.00}{\textbf{#1}}}
+\newcommand{\SpecialStringTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
+\newcommand{\StringTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
+\newcommand{\VariableTok}[1]{\textcolor[rgb]{0.00,0.00,0.00}{#1}}
+\newcommand{\VerbatimStringTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
+\newcommand{\WarningTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\usepackage{graphicx}
+\makeatletter
+\newsavebox\pandoc@box
+\newcommand*\pandocbounded[1]{% scales image to fit in text height/width
+  \sbox\pandoc@box{#1}%
+  \Gscale@div\@tempa{\textheight}{\dimexpr\ht\pandoc@box+\dp\pandoc@box\relax}%
+  \Gscale@div\@tempb{\linewidth}{\wd\pandoc@box}%
+  \ifdim\@tempb\p@<\@tempa\p@\let\@tempa\@tempb\fi% select the smaller of both
+  \ifdim\@tempa\p@<\p@\scalebox{\@tempa}{\usebox\pandoc@box}%
+  \else\usebox{\pandoc@box}%
+  \fi%
+}
+% Set default figure placement to htbp
+\def\fps@figure{htbp}
+\makeatother
+\setlength{\emergencystretch}{3em} % prevent overfull lines
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\usepackage{bookmark}
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+\urlstyle{same}
+\hypersetup{
+  pdftitle={RF Predicitions},
+  hidelinks,
+  pdfcreator={LaTeX via pandoc}}
+
+\title{RF Predicitions}
+\author{}
+\date{\vspace{-2.5em}2025-11-13}
+
+\begin{document}
+\maketitle
+
+\section{Fitting Random Forest
+Models}\label{fitting-random-forest-models}
+
+\subsection{On Data simulated from
+Cox}\label{on-data-simulated-from-cox}
+
+\subsubsection{Survival}\label{survival}
+
+Simulating data, fitting model, predicting
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{set.seed}\NormalTok{(}\DecValTok{375}\NormalTok{)}
+\NormalTok{beta }\OtherTok{=} \FunctionTok{matrix}\NormalTok{(}\FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{, }\DecValTok{0}\NormalTok{,}\FloatTok{0.5}\NormalTok{,}\SpecialCharTok{{-}}\FloatTok{0.5}\NormalTok{), }\AttributeTok{ncol =} \DecValTok{2}\NormalTok{, }\AttributeTok{nrow =} \DecValTok{2}\NormalTok{)}
+\NormalTok{newdata }\OtherTok{\textless{}{-}} \FunctionTok{data.frame}\NormalTok{(}\AttributeTok{L0 =} \FunctionTok{c}\NormalTok{(}\FloatTok{0.5}\NormalTok{,}\FloatTok{0.5}\NormalTok{), }\AttributeTok{A0 =} \FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{,}\DecValTok{0}\NormalTok{))}
+\NormalTok{y.pred }\OtherTok{\textless{}{-}} \FunctionTok{list}\NormalTok{()}
+
+\ControlFlowTok{for}\NormalTok{ (i }\ControlFlowTok{in} \DecValTok{1}\SpecialCharTok{:}\DecValTok{15}\NormalTok{)\{}
+\NormalTok{  data }\OtherTok{\textless{}{-}} \FunctionTok{simSurvData}\NormalTok{(}\AttributeTok{N =} \DecValTok{2000}\NormalTok{, }\AttributeTok{beta =}\NormalTok{ beta)}
+ 
+  \CommentTok{\#tune.nodesize(Surv(Time,Delta) \textasciitilde{} L0 + A0, data = data)}
+\NormalTok{  obj }\OtherTok{\textless{}{-}} \FunctionTok{rfsrc}\NormalTok{(}\FunctionTok{Surv}\NormalTok{(Time, Delta }\SpecialCharTok{==} \DecValTok{1}\NormalTok{) }\SpecialCharTok{\textasciitilde{}}\NormalTok{ L0 }\SpecialCharTok{+}\NormalTok{ A0, }\AttributeTok{data =}\NormalTok{ data, }\AttributeTok{nodesize =} \DecValTok{10}\NormalTok{)}
+   
+\NormalTok{  y.pred[[i]] }\OtherTok{\textless{}{-}} \FunctionTok{predict}\NormalTok{(obj, }\AttributeTok{newdata =}\NormalTok{ newdata)}
+\NormalTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+True survival function:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{true\_surv\_death\_func1 }\OtherTok{\textless{}{-}} \ControlFlowTok{function}\NormalTok{(t) }\FunctionTok{exp}\NormalTok{( }\SpecialCharTok{{-}} \FloatTok{0.1}  \SpecialCharTok{*}\NormalTok{ t}\SpecialCharTok{\^{}}\NormalTok{(}\FloatTok{1.1}\NormalTok{) }\SpecialCharTok{*} \FunctionTok{exp}\NormalTok{(}\FunctionTok{sum}\NormalTok{(newdata[}\DecValTok{1}\NormalTok{,] }\SpecialCharTok{*} \FunctionTok{c}\NormalTok{(}\FloatTok{0.5}\NormalTok{,}\SpecialCharTok{{-}}\FloatTok{0.5}\NormalTok{))))}
+\NormalTok{true\_surv\_death\_func2 }\OtherTok{\textless{}{-}} \ControlFlowTok{function}\NormalTok{(t) }\FunctionTok{exp}\NormalTok{( }\SpecialCharTok{{-}} \FloatTok{0.1}  \SpecialCharTok{*}\NormalTok{ t}\SpecialCharTok{\^{}}\NormalTok{(}\FloatTok{1.1}\NormalTok{) }\SpecialCharTok{*} \FunctionTok{exp}\NormalTok{(}\FunctionTok{sum}\NormalTok{(newdata[}\DecValTok{2}\NormalTok{,] }\SpecialCharTok{*} \FunctionTok{c}\NormalTok{(}\FloatTok{0.5}\NormalTok{,}\SpecialCharTok{{-}}\FloatTok{0.5}\NormalTok{))))}
+\CommentTok{\# Evaluate the true survival functions at these time points}
+\NormalTok{time\_points }\OtherTok{\textless{}{-}} \FunctionTok{round}\NormalTok{(y.pred[[}\DecValTok{1}\NormalTok{]]}\SpecialCharTok{$}\NormalTok{time.interest, }\DecValTok{2}\NormalTok{)}
+\NormalTok{true\_surv1 }\OtherTok{\textless{}{-}} \FunctionTok{true\_surv\_death\_func1}\NormalTok{(time\_points)}
+\NormalTok{true\_surv2 }\OtherTok{\textless{}{-}} \FunctionTok{true\_surv\_death\_func2}\NormalTok{(time\_points)}
+\end{Highlighting}
+\end{Shaded}
+
+Visualizing fit
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{par}\NormalTok{(}\AttributeTok{mfrow =} \FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{,}\DecValTok{2}\NormalTok{), }\AttributeTok{cex.axis =} \FloatTok{2.0}\NormalTok{, }\AttributeTok{cex.lab =} \FloatTok{2.0}\NormalTok{, }\AttributeTok{cex.main =} \FloatTok{2.0}\NormalTok{, }\AttributeTok{mar =} \FunctionTok{c}\NormalTok{(}\DecValTok{6}\NormalTok{,}\DecValTok{6}\NormalTok{,}\DecValTok{1}\NormalTok{,}\DecValTok{1}\NormalTok{), }\AttributeTok{mgp =} \FunctionTok{c}\NormalTok{(}\DecValTok{4}\NormalTok{,}\DecValTok{1}\NormalTok{,}\DecValTok{0}\NormalTok{))}
+
+\CommentTok{\# Initialize plot for process 1}
+\FunctionTok{plot}\NormalTok{(}\ConstantTok{NULL}\NormalTok{, }\AttributeTok{xlim =} \FunctionTok{range}\NormalTok{(y.pred[[}\DecValTok{1}\NormalTok{]]}\SpecialCharTok{$}\NormalTok{time.interest), }\AttributeTok{ylim =} \FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{,}\DecValTok{1}\NormalTok{),}
+     \AttributeTok{xlab =} \StringTok{"Time (Year)"}\NormalTok{, }\AttributeTok{ylab =} \StringTok{"Survival"}\NormalTok{)}
+
+\CommentTok{\# Loop over all elements in y.pred}
+\ControlFlowTok{for}\NormalTok{ (i }\ControlFlowTok{in} \FunctionTok{seq\_along}\NormalTok{(y.pred)) \{}
+  \FunctionTok{lines}\NormalTok{(y.pred[[i]]}\SpecialCharTok{$}\NormalTok{time.interest, y.pred[[i]]}\SpecialCharTok{$}\NormalTok{survival[}\DecValTok{1}\NormalTok{,],}
+        \AttributeTok{col =} \FunctionTok{rgb}\NormalTok{(}\DecValTok{0}\NormalTok{,}\DecValTok{0}\NormalTok{,}\DecValTok{1}\NormalTok{,}\AttributeTok{alpha=}\FloatTok{0.3}\NormalTok{))  }\CommentTok{\# blue semi{-}transparent}
+\NormalTok{\}}
+\FunctionTok{lines}\NormalTok{(time\_points, true\_surv1, }\AttributeTok{col=}\StringTok{"blue"}\NormalTok{, }\AttributeTok{lty=}\DecValTok{2}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{)}
+
+\CommentTok{\# Initialize plot for process 2}
+\FunctionTok{plot}\NormalTok{(}\ConstantTok{NULL}\NormalTok{, }\AttributeTok{xlim =} \FunctionTok{range}\NormalTok{(y.pred[[}\DecValTok{1}\NormalTok{]]}\SpecialCharTok{$}\NormalTok{time.interest), }\AttributeTok{ylim =} \FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{,}\DecValTok{1}\NormalTok{),}
+     \AttributeTok{xlab =} \StringTok{"Time (Year)"}\NormalTok{, }\AttributeTok{ylab =} \StringTok{"Survival"}\NormalTok{)}
+
+\CommentTok{\# Loop over all elements in y.pred}
+\ControlFlowTok{for}\NormalTok{ (i }\ControlFlowTok{in} \FunctionTok{seq\_along}\NormalTok{(y.pred)) \{}
+  \FunctionTok{lines}\NormalTok{(y.pred[[i]]}\SpecialCharTok{$}\NormalTok{time.interest, y.pred[[i]]}\SpecialCharTok{$}\NormalTok{survival[}\DecValTok{2}\NormalTok{,],}
+        \AttributeTok{col =} \FunctionTok{rgb}\NormalTok{(}\DecValTok{1}\NormalTok{,}\DecValTok{0}\NormalTok{,}\DecValTok{0}\NormalTok{,}\AttributeTok{alpha=}\FloatTok{0.3}\NormalTok{))  }\CommentTok{\# red semi{-}transparent}
+\NormalTok{\}}
+\FunctionTok{lines}\NormalTok{(time\_points, true\_surv2, }\AttributeTok{col=}\StringTok{"red"}\NormalTok{, }\AttributeTok{lty=}\DecValTok{2}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{)}
+
+\FunctionTok{legend}\NormalTok{(}\StringTok{"topright"}\NormalTok{,}
+       \AttributeTok{legend=}\FunctionTok{c}\NormalTok{(}\StringTok{"A0=1 (Predicted)"}\NormalTok{, }\StringTok{"A0=0 (Predicted)"}\NormalTok{, }\StringTok{"A0=1 (True)"}\NormalTok{, }\StringTok{"A0=0 (True)"}\NormalTok{),}
+       \AttributeTok{col=}\FunctionTok{c}\NormalTok{(}\StringTok{"blue"}\NormalTok{,}\StringTok{"red"}\NormalTok{,}\StringTok{"blue"}\NormalTok{,}\StringTok{"red"}\NormalTok{),}
+       \AttributeTok{lty=}\FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{,}\DecValTok{1}\NormalTok{,}\DecValTok{2}\NormalTok{,}\DecValTok{2}\NormalTok{), }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{, }\AttributeTok{cex=}\DecValTok{1}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\pandocbounded{\includegraphics[keepaspectratio]{RF_predicitons_files/figure-latex/unnamed-chunk-4-1.pdf}}
+
+\subsubsection{Competing Risk}\label{competing-risk}
+
+Simulate data, fit RSF model, create predictions
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{set.seed}\NormalTok{(}\DecValTok{373}\NormalTok{)}
+\NormalTok{beta }\OtherTok{=} \FunctionTok{matrix}\NormalTok{(}\FunctionTok{c}\NormalTok{(}\FloatTok{0.5}\NormalTok{,}\SpecialCharTok{{-}}\DecValTok{1}\NormalTok{,}\SpecialCharTok{{-}}\FloatTok{0.5}\NormalTok{,}\FloatTok{0.5}\NormalTok{,}\DecValTok{0}\NormalTok{,}\FloatTok{0.5}\NormalTok{), }\AttributeTok{ncol =} \DecValTok{3}\NormalTok{, }\AttributeTok{nrow =} \DecValTok{2}\NormalTok{)}
+\NormalTok{newdata }\OtherTok{\textless{}{-}} \FunctionTok{data.frame}\NormalTok{(}\AttributeTok{L0 =} \FunctionTok{c}\NormalTok{(}\FloatTok{0.5}\NormalTok{,}\FloatTok{0.5}\NormalTok{), }\AttributeTok{A0 =} \FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{,}\DecValTok{0}\NormalTok{))}
+\NormalTok{y.pred }\OtherTok{\textless{}{-}} \FunctionTok{list}\NormalTok{()}
+\ControlFlowTok{for}\NormalTok{(i }\ControlFlowTok{in} \DecValTok{1}\SpecialCharTok{:}\DecValTok{10}\NormalTok{)\{}
+\NormalTok{  data }\OtherTok{\textless{}{-}} \FunctionTok{simCRdata}\NormalTok{(}\AttributeTok{N =} \DecValTok{3000}\NormalTok{, }\AttributeTok{beta =}\NormalTok{ beta)}
+  
+  \CommentTok{\#tune.nodesize(Surv(Time,Delta) \textasciitilde{} L0 + A0, data = data)}
+\NormalTok{  RF }\OtherTok{\textless{}{-}} \FunctionTok{rfsrc}\NormalTok{(}\FunctionTok{Surv}\NormalTok{(Time, Delta) }\SpecialCharTok{\textasciitilde{}}\NormalTok{ L0 }\SpecialCharTok{+}\NormalTok{ A0, }\AttributeTok{data =}\NormalTok{ data, }\AttributeTok{nodesize =} \DecValTok{150}\NormalTok{)}
+
+\NormalTok{  y.pred[[i]] }\OtherTok{\textless{}{-}} \FunctionTok{predict}\NormalTok{(RF, }\AttributeTok{newdata =}\NormalTok{ newdata)}
+\NormalTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+True CHF
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{true\_chf\_func1 }\OtherTok{\textless{}{-}} \ControlFlowTok{function}\NormalTok{(t, cov)  }\FloatTok{0.1}  \SpecialCharTok{*}\NormalTok{ t}\SpecialCharTok{\^{}}\NormalTok{(}\FloatTok{1.1}\NormalTok{) }\SpecialCharTok{*} \FunctionTok{exp}\NormalTok{(}\FunctionTok{sum}\NormalTok{(cov }\SpecialCharTok{*} \FunctionTok{c}\NormalTok{(}\SpecialCharTok{{-}}\FloatTok{0.5}\NormalTok{,}\FloatTok{0.5}\NormalTok{)))}
+\NormalTok{true\_chf\_func2 }\OtherTok{\textless{}{-}} \ControlFlowTok{function}\NormalTok{(t, cov)  }\FloatTok{0.1}  \SpecialCharTok{*}\NormalTok{ t}\SpecialCharTok{\^{}}\NormalTok{(}\FloatTok{1.1}\NormalTok{) }\SpecialCharTok{*} \FunctionTok{exp}\NormalTok{(}\FunctionTok{sum}\NormalTok{(cov }\SpecialCharTok{*} \FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{,}\FloatTok{0.5}\NormalTok{)))}
+
+\CommentTok{\# Evaluate the true survival functions at time points}
+\NormalTok{time\_points }\OtherTok{\textless{}{-}}\NormalTok{ y.pred[[}\FunctionTok{length}\NormalTok{(y.pred)]]}\SpecialCharTok{$}\NormalTok{time.interest}
+\NormalTok{true\_chf11 }\OtherTok{\textless{}{-}} \FunctionTok{true\_chf\_func1}\NormalTok{(time\_points, newdata[}\DecValTok{1}\NormalTok{,])}
+\NormalTok{true\_chf12 }\OtherTok{\textless{}{-}} \FunctionTok{true\_chf\_func1}\NormalTok{(time\_points, newdata[}\DecValTok{2}\NormalTok{,])}
+\NormalTok{true\_chf21 }\OtherTok{\textless{}{-}} \FunctionTok{true\_chf\_func2}\NormalTok{(time\_points, newdata[}\DecValTok{1}\NormalTok{,])}
+\NormalTok{true\_chf22 }\OtherTok{\textless{}{-}} \FunctionTok{true\_chf\_func2}\NormalTok{(time\_points, newdata[}\DecValTok{2}\NormalTok{,])}
+\end{Highlighting}
+\end{Shaded}
+
+Plot the true CHF together with the 10 estimated CHF´s
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{par}\NormalTok{(}\AttributeTok{mfrow =} \FunctionTok{c}\NormalTok{(}\DecValTok{2}\NormalTok{, }\DecValTok{2}\NormalTok{), }\AttributeTok{mar   =} \FunctionTok{c}\NormalTok{(}\DecValTok{2}\NormalTok{, }\DecValTok{2}\NormalTok{, }\DecValTok{2}\NormalTok{, }\DecValTok{1}\NormalTok{), }\AttributeTok{cex.axis =} \DecValTok{1}\NormalTok{, }
+    \AttributeTok{cex.lab  =} \DecValTok{1}\NormalTok{, }\AttributeTok{cex.main =} \DecValTok{1}\NormalTok{, }\AttributeTok{mgp =} \FunctionTok{c}\NormalTok{(}\FloatTok{2.5}\NormalTok{, }\FloatTok{0.8}\NormalTok{, }\DecValTok{0}\NormalTok{))  }\CommentTok{\#oma   = c(5, 5, 2, 1)}
+
+\CommentTok{\# {-}{-}{-}{-} Process 1, A0 = 1 {-}{-}{-}{-}}
+\FunctionTok{plot}\NormalTok{(time\_points, true\_chf11, }\AttributeTok{type=}\StringTok{"l"}\NormalTok{,}
+     \AttributeTok{xlab=}\StringTok{"Time"}\NormalTok{, }\AttributeTok{ylab=}\StringTok{"CHF"}\NormalTok{,}
+     \AttributeTok{col=}\DecValTok{1}\NormalTok{, }\AttributeTok{lty=}\DecValTok{1}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{, }\AttributeTok{xlim=}\FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{,}\DecValTok{10}\NormalTok{), }\AttributeTok{ylim=}\FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{, }\FloatTok{2.5}\NormalTok{))}
+\ControlFlowTok{for}\NormalTok{ (i }\ControlFlowTok{in} \FunctionTok{seq\_along}\NormalTok{(y.pred)) \{}
+  \FunctionTok{lines}\NormalTok{(y.pred[[i]]}\SpecialCharTok{$}\NormalTok{time.interest, y.pred[[i]]}\SpecialCharTok{$}\NormalTok{chf[}\DecValTok{1}\NormalTok{,,}\DecValTok{1}\NormalTok{],}
+        \AttributeTok{col=}\FunctionTok{adjustcolor}\NormalTok{(}\DecValTok{1}\NormalTok{, }\AttributeTok{alpha.f=}\FloatTok{0.3}\NormalTok{), }\AttributeTok{lty=}\DecValTok{2}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{)}
+\NormalTok{\}}
+\FunctionTok{title}\NormalTok{(}\AttributeTok{main =} \StringTok{"Process 1, A0 = 1"}\NormalTok{)}
+
+\CommentTok{\# {-}{-}{-}{-} Process 1, A0 = 0 {-}{-}{-}{-}}
+\FunctionTok{plot}\NormalTok{(time\_points, true\_chf12, }\AttributeTok{type=}\StringTok{"l"}\NormalTok{,}
+     \AttributeTok{xlab=}\StringTok{"Time"}\NormalTok{, }\AttributeTok{ylab=}\StringTok{"CHF"}\NormalTok{,}
+     \AttributeTok{col=}\DecValTok{2}\NormalTok{, }\AttributeTok{lty=}\DecValTok{1}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{, }\AttributeTok{xlim=}\FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{,}\DecValTok{10}\NormalTok{), }\AttributeTok{ylim=}\FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{, }\DecValTok{2}\NormalTok{))}
+\ControlFlowTok{for}\NormalTok{ (i }\ControlFlowTok{in} \FunctionTok{seq\_along}\NormalTok{(y.pred)) \{}
+  \FunctionTok{lines}\NormalTok{(y.pred[[i]]}\SpecialCharTok{$}\NormalTok{time.interest, y.pred[[i]]}\SpecialCharTok{$}\NormalTok{chf[}\DecValTok{2}\NormalTok{,,}\DecValTok{1}\NormalTok{],}
+        \AttributeTok{col=}\FunctionTok{adjustcolor}\NormalTok{(}\DecValTok{2}\NormalTok{, }\AttributeTok{alpha.f=}\FloatTok{0.3}\NormalTok{), }\AttributeTok{lty=}\DecValTok{2}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{)}
+\NormalTok{\}}
+\FunctionTok{title}\NormalTok{(}\AttributeTok{main =} \StringTok{"Process 1, A0 = 0"}\NormalTok{)}
+
+\CommentTok{\# {-}{-}{-}{-} Process 2, A0 = 1 {-}{-}{-}{-}}
+\FunctionTok{plot}\NormalTok{(time\_points, true\_chf21, }\AttributeTok{type=}\StringTok{"l"}\NormalTok{,}
+     \AttributeTok{xlab=}\StringTok{"Time"}\NormalTok{, }\AttributeTok{ylab=}\StringTok{"CHF"}\NormalTok{,}
+     \AttributeTok{col=}\DecValTok{3}\NormalTok{, }\AttributeTok{lty=}\DecValTok{1}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{, }\AttributeTok{xlim=}\FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{,}\DecValTok{10}\NormalTok{), }\AttributeTok{ylim=}\FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{, }\FloatTok{2.5}\NormalTok{))}
+\ControlFlowTok{for}\NormalTok{ (i }\ControlFlowTok{in} \FunctionTok{seq\_along}\NormalTok{(y.pred)) \{}
+  \FunctionTok{lines}\NormalTok{(y.pred[[i]]}\SpecialCharTok{$}\NormalTok{time.interest, y.pred[[i]]}\SpecialCharTok{$}\NormalTok{chf[}\DecValTok{1}\NormalTok{,,}\DecValTok{2}\NormalTok{],}
+        \AttributeTok{col=}\FunctionTok{adjustcolor}\NormalTok{(}\DecValTok{3}\NormalTok{, }\AttributeTok{alpha.f=}\FloatTok{0.3}\NormalTok{), }\AttributeTok{lty=}\DecValTok{2}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{)}
+\NormalTok{\}}
+\FunctionTok{title}\NormalTok{(}\AttributeTok{main =} \StringTok{"Process 2, A0 = 1"}\NormalTok{)}
+
+\CommentTok{\# {-}{-}{-}{-} Process 2, A0 = 0 {-}{-}{-}{-}}
+\FunctionTok{plot}\NormalTok{(time\_points, true\_chf22, }\AttributeTok{type=}\StringTok{"l"}\NormalTok{,}
+     \AttributeTok{xlab=}\StringTok{"Time"}\NormalTok{, }\AttributeTok{ylab=}\StringTok{"CHF"}\NormalTok{,}
+     \AttributeTok{col=}\DecValTok{4}\NormalTok{, }\AttributeTok{lty=}\DecValTok{1}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{, }\AttributeTok{xlim=}\FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{,}\DecValTok{10}\NormalTok{), }\AttributeTok{ylim=}\FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{, }\DecValTok{2}\NormalTok{))}
+\ControlFlowTok{for}\NormalTok{ (i }\ControlFlowTok{in} \FunctionTok{seq\_along}\NormalTok{(y.pred)) \{}
+  \FunctionTok{lines}\NormalTok{(y.pred[[i]]}\SpecialCharTok{$}\NormalTok{time.interest, y.pred[[i]]}\SpecialCharTok{$}\NormalTok{chf[}\DecValTok{2}\NormalTok{,,}\DecValTok{2}\NormalTok{],}
+        \AttributeTok{col=}\FunctionTok{adjustcolor}\NormalTok{(}\DecValTok{4}\NormalTok{, }\AttributeTok{alpha.f=}\FloatTok{0.3}\NormalTok{), }\AttributeTok{lty=}\DecValTok{2}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{)}
+\NormalTok{\}}
+\FunctionTok{title}\NormalTok{(}\AttributeTok{main =} \StringTok{"Process 2, A0 = 0"}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\pandocbounded{\includegraphics[keepaspectratio]{RF_predicitons_files/figure-latex/unnamed-chunk-7-1.pdf}}
+
+Fit Cox models
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{cox1 }\OtherTok{\textless{}{-}} \FunctionTok{coxph}\NormalTok{(}\FunctionTok{Surv}\NormalTok{(Time, Delta }\SpecialCharTok{==} \DecValTok{1}\NormalTok{) }\SpecialCharTok{\textasciitilde{}}\NormalTok{ L0 }\SpecialCharTok{+}\NormalTok{ A0, }\AttributeTok{data =}\NormalTok{ data)}
+\NormalTok{cox2 }\OtherTok{\textless{}{-}} \FunctionTok{coxph}\NormalTok{(}\FunctionTok{Surv}\NormalTok{(Time, Delta }\SpecialCharTok{==} \DecValTok{2}\NormalTok{) }\SpecialCharTok{\textasciitilde{}}\NormalTok{ L0 }\SpecialCharTok{+}\NormalTok{ A0, }\AttributeTok{data =}\NormalTok{ data)}
+\NormalTok{basehazz1 }\OtherTok{\textless{}{-}} \FunctionTok{basehaz}\NormalTok{(cox1, }\AttributeTok{centered =} \ConstantTok{TRUE}\NormalTok{)}
+\NormalTok{basehazz2 }\OtherTok{\textless{}{-}} \FunctionTok{basehaz}\NormalTok{(cox2, }\AttributeTok{centered =} \ConstantTok{TRUE}\NormalTok{)}
+\NormalTok{cox\_term1 }\OtherTok{\textless{}{-}} \FunctionTok{exp}\NormalTok{(}\FunctionTok{predict}\NormalTok{(cox1, }\AttributeTok{newdata=}\NormalTok{newdata, }\AttributeTok{type=}\StringTok{"lp"}\NormalTok{))}
+\NormalTok{cox\_term2 }\OtherTok{\textless{}{-}} \FunctionTok{exp}\NormalTok{(}\FunctionTok{predict}\NormalTok{(cox2, }\AttributeTok{newdata=}\NormalTok{newdata, }\AttributeTok{type=}\StringTok{"lp"}\NormalTok{))}
+\NormalTok{cum\_int1 }\OtherTok{\textless{}{-}} \FunctionTok{outer}\NormalTok{(basehazz1[[}\StringTok{\textquotesingle{}hazard\textquotesingle{}}\NormalTok{]], cox\_term1, }\StringTok{"*"}\NormalTok{)}
+\NormalTok{cum\_int2 }\OtherTok{\textless{}{-}} \FunctionTok{outer}\NormalTok{(basehazz2[[}\StringTok{\textquotesingle{}hazard\textquotesingle{}}\NormalTok{]], cox\_term2, }\StringTok{"*"}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+Plot a single fit with Cox models:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{par}\NormalTok{(}\AttributeTok{mfrow =} \FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{,}\DecValTok{2}\NormalTok{), }\AttributeTok{cex.axis =} \FloatTok{1.0}\NormalTok{, }\AttributeTok{cex.lab =} \FloatTok{1.0}\NormalTok{, }\AttributeTok{cex.main =} \FloatTok{2.0}\NormalTok{, }\AttributeTok{mar =} \FunctionTok{c}\NormalTok{(}\FloatTok{3.0}\NormalTok{,}\DecValTok{3}\NormalTok{,}\DecValTok{1}\NormalTok{,}\DecValTok{1}\NormalTok{), }\AttributeTok{mgp =} \FunctionTok{c}\NormalTok{(}\DecValTok{4}\NormalTok{, }\DecValTok{1}\NormalTok{, }\DecValTok{0}\NormalTok{))}
+\CommentTok{\# Process 1}
+\FunctionTok{plot}\NormalTok{(time\_points,y.pred[[}\FunctionTok{length}\NormalTok{(y.pred)]]}\SpecialCharTok{$}\NormalTok{chf[}\DecValTok{1}\NormalTok{,,}\DecValTok{1}\NormalTok{], }\AttributeTok{type=}\StringTok{"l"}\NormalTok{, }\AttributeTok{xlab=}\StringTok{"Time"}\NormalTok{,}
+     \AttributeTok{ylab=}\StringTok{"Process 1 CHF"}\NormalTok{, }\AttributeTok{col=}\DecValTok{1}\NormalTok{, }\AttributeTok{lty=}\DecValTok{1}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{, }\AttributeTok{xlim =} \FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{,}\DecValTok{15}\NormalTok{))}
+\FunctionTok{lines}\NormalTok{(time\_points, y.pred[[}\FunctionTok{length}\NormalTok{(y.pred)]]}\SpecialCharTok{$}\NormalTok{chf[}\DecValTok{2}\NormalTok{,,}\DecValTok{1}\NormalTok{], }\AttributeTok{col=}\DecValTok{1}\NormalTok{, }\AttributeTok{lty=}\DecValTok{2}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{)}
+\CommentTok{\# Add lines for the true survival functions}
+\FunctionTok{lines}\NormalTok{(time\_points, true\_chf11, }\AttributeTok{col=}\DecValTok{2}\NormalTok{, }\AttributeTok{lty=}\DecValTok{1}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{)  }
+\FunctionTok{lines}\NormalTok{(time\_points, true\_chf12, }\AttributeTok{col=}\DecValTok{2}\NormalTok{, }\AttributeTok{lty=}\DecValTok{2}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{)  }
+\FunctionTok{lines}\NormalTok{(basehazz1}\SpecialCharTok{$}\NormalTok{time, cum\_int1[,}\DecValTok{1}\NormalTok{], }\AttributeTok{col=}\DecValTok{3}\NormalTok{, }\AttributeTok{lty=}\DecValTok{1}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{)}
+\FunctionTok{lines}\NormalTok{(basehazz2}\SpecialCharTok{$}\NormalTok{time, cum\_int1[,}\DecValTok{2}\NormalTok{], }\AttributeTok{col=}\DecValTok{3}\NormalTok{, }\AttributeTok{lty=}\DecValTok{2}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{)}
+
+\CommentTok{\# Process 2}
+\FunctionTok{plot}\NormalTok{(time\_points,y.pred[[}\FunctionTok{length}\NormalTok{(y.pred)]]}\SpecialCharTok{$}\NormalTok{chf[}\DecValTok{1}\NormalTok{,,}\DecValTok{2}\NormalTok{], }\AttributeTok{type=}\StringTok{"l"}\NormalTok{, }\AttributeTok{xlab=}\StringTok{"Time"}\NormalTok{,}
+     \AttributeTok{ylab=}\StringTok{"Process 2 CHF"}\NormalTok{, }\AttributeTok{col=}\DecValTok{1}\NormalTok{, }\AttributeTok{lty=}\DecValTok{1}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{, }\AttributeTok{xlim =} \FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{,}\DecValTok{15}\NormalTok{))}
+\FunctionTok{lines}\NormalTok{(time\_points, y.pred[[}\FunctionTok{length}\NormalTok{(y.pred)]]}\SpecialCharTok{$}\NormalTok{chf[}\DecValTok{2}\NormalTok{,,}\DecValTok{2}\NormalTok{], }\AttributeTok{col=}\DecValTok{1}\NormalTok{, }\AttributeTok{lty=}\DecValTok{2}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{)}
+\CommentTok{\# Add lines for the true survival functions}
+\FunctionTok{lines}\NormalTok{(time\_points, true\_chf21, }\AttributeTok{col=}\DecValTok{2}\NormalTok{, }\AttributeTok{lty=}\DecValTok{1}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{)  }
+\FunctionTok{lines}\NormalTok{(time\_points, true\_chf22, }\AttributeTok{col=}\DecValTok{2}\NormalTok{, }\AttributeTok{lty=}\DecValTok{2}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{) }
+\FunctionTok{lines}\NormalTok{(basehazz2}\SpecialCharTok{$}\NormalTok{time, cum\_int2[,}\DecValTok{1}\NormalTok{], }\AttributeTok{col=}\DecValTok{3}\NormalTok{, }\AttributeTok{lty=}\DecValTok{1}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{)}
+\FunctionTok{lines}\NormalTok{(basehazz2}\SpecialCharTok{$}\NormalTok{time, cum\_int2[,}\DecValTok{2}\NormalTok{], }\AttributeTok{col=}\DecValTok{3}\NormalTok{, }\AttributeTok{lty=}\DecValTok{2}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{)}
+
+\FunctionTok{legend}\NormalTok{(}\StringTok{"topright"}\NormalTok{, }
+       \AttributeTok{legend =} \FunctionTok{c}\NormalTok{(}\StringTok{"RF CHF A0 = 1"}\NormalTok{, }\StringTok{"RF CHF A0 = 0"}\NormalTok{, }\StringTok{"True CHF A0 = 1"}\NormalTok{, }\StringTok{"True CHF A0 = 0"}\NormalTok{,}
+                  \StringTok{"Cox CHF A0 = 1"}\NormalTok{, }\StringTok{"Cox CHF A0 = 0"}\NormalTok{),}
+       \AttributeTok{col =} \FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{1}\NormalTok{, }\DecValTok{2}\NormalTok{, }\DecValTok{2}\NormalTok{, }\DecValTok{3}\NormalTok{, }\DecValTok{3}\NormalTok{),}
+       \AttributeTok{lty =} \FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{2}\NormalTok{, }\DecValTok{1}\NormalTok{, }\DecValTok{2}\NormalTok{, }\DecValTok{1}\NormalTok{, }\DecValTok{2}\NormalTok{),}
+       \AttributeTok{lwd =} \DecValTok{2}\NormalTok{,}
+       \AttributeTok{cex =} \FloatTok{0.75}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\pandocbounded{\includegraphics[keepaspectratio]{RF_predicitons_files/figure-latex/unnamed-chunk-9-1.pdf}}
+
+\subsubsection{General Event History}\label{general-event-history}
+
+Simulate data
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{data }\OtherTok{\textless{}{-}} \FunctionTok{simTreatment}\NormalTok{(}\DecValTok{3000}\NormalTok{)}
+\NormalTok{data }\OtherTok{\textless{}{-}} \FunctionTok{IntFormatData}\NormalTok{(data, }\AttributeTok{N\_cols =} \FunctionTok{c}\NormalTok{(}\DecValTok{5}\NormalTok{,}\DecValTok{6}\NormalTok{))}
+\end{Highlighting}
+\end{Shaded}
+
+We might be able to use this package
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{library}\NormalTok{(recforest)}
+\end{Highlighting}
+\end{Shaded}
+
+Train a recforest model
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\#set.seed(1234)}
+\CommentTok{\#trained\_forest \textless{}{-} train\_forest(}
+\CommentTok{\#  data = data,}
+\CommentTok{\#  id\_var = "ID",}
+\CommentTok{\#  covariates = c("L0"),}
+\CommentTok{\#  time\_vars = c("tstart", "tstop"),}
+\CommentTok{\#  death\_var = "death",}
+\CommentTok{\#  event = c("A", "L"),}
+\CommentTok{\#  n\_trees = 3,}
+\CommentTok{\#  n\_bootstrap = round(2 * nrow(data) / 3),}
+\CommentTok{\#  mtry = 2,}
+\CommentTok{\#  minsplit = 3,}
+\CommentTok{\#  nodesize = 15,}
+\CommentTok{\#  method = "NAa",}
+\CommentTok{\#  min\_score = 5,}
+\CommentTok{\#  max\_nodes = 20,}
+\CommentTok{\#  seed = 111}
+\CommentTok{\#)}
+\end{Highlighting}
+\end{Shaded}
+
+\subsection{On Data not from Cox}\label{on-data-not-from-cox}
+
+\subsubsection{Survival}\label{survival-1}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{beta }\OtherTok{\textless{}{-}} \FunctionTok{matrix}\NormalTok{(}\FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{, }\DecValTok{0}\NormalTok{, }\DecValTok{0}\NormalTok{, }\DecValTok{0}\NormalTok{, }\SpecialCharTok{{-}}\FloatTok{0.5}\NormalTok{ , }\DecValTok{1}\NormalTok{, }\DecValTok{0}\NormalTok{, }\DecValTok{0}\NormalTok{), }\AttributeTok{ncol =} \DecValTok{2}\NormalTok{)}
+\NormalTok{beta\_TV }\OtherTok{\textless{}{-}} \FunctionTok{matrix}\NormalTok{(}\FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{, }\DecValTok{0}\NormalTok{, }\DecValTok{0}\NormalTok{, }\DecValTok{0}\NormalTok{, }\FloatTok{0.5}\NormalTok{ , }\SpecialCharTok{{-}}\DecValTok{2}\NormalTok{, }\DecValTok{0}\NormalTok{, }\DecValTok{0}\NormalTok{), }\AttributeTok{ncol =} \DecValTok{2}\NormalTok{)}
+\NormalTok{t\_prime }\OtherTok{\textless{}{-}} \DecValTok{2}
+\NormalTok{data }\OtherTok{\textless{}{-}} \FunctionTok{simEventTV}\NormalTok{(}\DecValTok{4000}\NormalTok{, }\AttributeTok{beta =}\NormalTok{ beta, }\AttributeTok{term\_deltas =} \FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{,}\DecValTok{1}\NormalTok{), }\AttributeTok{tv\_eff =}\NormalTok{ beta\_TV, }\AttributeTok{t\_prime =}\NormalTok{ t\_prime)}
+\end{Highlighting}
+\end{Shaded}
+
+Fit model
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\#tune.nodesize(Surv(Time,Delta) \textasciitilde{} L0 + A0, data = data)}
+\NormalTok{obj }\OtherTok{\textless{}{-}} \FunctionTok{rfsrc}\NormalTok{(}\FunctionTok{Surv}\NormalTok{(Time, Delta) }\SpecialCharTok{\textasciitilde{}}\NormalTok{ L0 }\SpecialCharTok{+}\NormalTok{ A0, }\AttributeTok{data =}\NormalTok{ data, }\AttributeTok{nodesize =} \DecValTok{10}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+Predictions
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{newdata }\OtherTok{\textless{}{-}} \FunctionTok{data.frame}\NormalTok{(}\AttributeTok{L0 =} \FunctionTok{c}\NormalTok{(}\FloatTok{0.5}\NormalTok{,}\FloatTok{0.5}\NormalTok{), }\AttributeTok{A0 =} \FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{,}\DecValTok{0}\NormalTok{))}
+\NormalTok{y.pred }\OtherTok{\textless{}{-}} \FunctionTok{predict}\NormalTok{(obj, }\AttributeTok{newdata =}\NormalTok{ newdata)}
+\end{Highlighting}
+\end{Shaded}
+
+True survival function:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{true\_surv\_death\_func1 }\OtherTok{\textless{}{-}} \ControlFlowTok{function}\NormalTok{(t) \{}
+  \ControlFlowTok{if}\NormalTok{(t }\SpecialCharTok{\textless{}=}\NormalTok{ t\_prime) }\FunctionTok{return}\NormalTok{(}\FunctionTok{exp}\NormalTok{( }\SpecialCharTok{{-}} \FloatTok{0.1}  \SpecialCharTok{*}\NormalTok{ t}\SpecialCharTok{\^{}}\NormalTok{(}\FloatTok{1.1}\NormalTok{) }\SpecialCharTok{*} \FunctionTok{exp}\NormalTok{(}\FunctionTok{sum}\NormalTok{(newdata[}\DecValTok{1}\NormalTok{,] }\SpecialCharTok{*} \FunctionTok{c}\NormalTok{(}\SpecialCharTok{{-}}\FloatTok{0.5}\NormalTok{,}\DecValTok{1}\NormalTok{)))))}
+  \FunctionTok{exp}\NormalTok{( }\SpecialCharTok{{-}}\NormalTok{ (}\FloatTok{0.1}  \SpecialCharTok{*}\NormalTok{ t\_prime}\SpecialCharTok{\^{}}\NormalTok{(}\FloatTok{1.1}\NormalTok{) }\SpecialCharTok{*} \FunctionTok{exp}\NormalTok{(}\FunctionTok{sum}\NormalTok{(newdata[}\DecValTok{1}\NormalTok{,] }\SpecialCharTok{*} \FunctionTok{c}\NormalTok{(}\SpecialCharTok{{-}}\FloatTok{0.5}\NormalTok{,}\DecValTok{1}\NormalTok{))) }\SpecialCharTok{+} 
+          \FloatTok{0.1}  \SpecialCharTok{*}\NormalTok{ t}\SpecialCharTok{\^{}}\NormalTok{(}\FloatTok{1.1}\NormalTok{) }\SpecialCharTok{*} \FunctionTok{exp}\NormalTok{(}\FunctionTok{sum}\NormalTok{(newdata[}\DecValTok{1}\NormalTok{,] }\SpecialCharTok{*} \FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{,}\SpecialCharTok{{-}}\DecValTok{1}\NormalTok{))) }\SpecialCharTok{{-}}
+          \FloatTok{0.1}  \SpecialCharTok{*}\NormalTok{ t\_prime}\SpecialCharTok{\^{}}\NormalTok{(}\FloatTok{1.1}\NormalTok{) }\SpecialCharTok{*} \FunctionTok{exp}\NormalTok{(}\FunctionTok{sum}\NormalTok{(newdata[}\DecValTok{1}\NormalTok{,] }\SpecialCharTok{*} \FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{,}\SpecialCharTok{{-}}\DecValTok{1}\NormalTok{)))))}
+\NormalTok{\}}
+\NormalTok{true\_surv\_death\_func2 }\OtherTok{\textless{}{-}} \ControlFlowTok{function}\NormalTok{(t) \{}
+  \ControlFlowTok{if}\NormalTok{(t }\SpecialCharTok{\textless{}=}\NormalTok{ t\_prime) }\FunctionTok{return}\NormalTok{(}\FunctionTok{exp}\NormalTok{( }\SpecialCharTok{{-}} \FloatTok{0.1}  \SpecialCharTok{*}\NormalTok{ t}\SpecialCharTok{\^{}}\NormalTok{(}\FloatTok{1.1}\NormalTok{) }\SpecialCharTok{*} \FunctionTok{exp}\NormalTok{(}\FunctionTok{sum}\NormalTok{(newdata[}\DecValTok{2}\NormalTok{,] }\SpecialCharTok{*} \FunctionTok{c}\NormalTok{(}\SpecialCharTok{{-}}\FloatTok{0.5}\NormalTok{,}\DecValTok{1}\NormalTok{)))))}
+  \FunctionTok{exp}\NormalTok{( }\SpecialCharTok{{-}}\NormalTok{ (}\FloatTok{0.1}  \SpecialCharTok{*}\NormalTok{ t\_prime}\SpecialCharTok{\^{}}\NormalTok{(}\FloatTok{1.1}\NormalTok{) }\SpecialCharTok{*} \FunctionTok{exp}\NormalTok{(}\FunctionTok{sum}\NormalTok{(newdata[}\DecValTok{2}\NormalTok{,] }\SpecialCharTok{*} \FunctionTok{c}\NormalTok{(}\SpecialCharTok{{-}}\FloatTok{0.5}\NormalTok{,}\DecValTok{1}\NormalTok{))) }\SpecialCharTok{+} 
+          \FloatTok{0.1}  \SpecialCharTok{*}\NormalTok{ t}\SpecialCharTok{\^{}}\NormalTok{(}\FloatTok{1.1}\NormalTok{) }\SpecialCharTok{*} \FunctionTok{exp}\NormalTok{(}\FunctionTok{sum}\NormalTok{(newdata[}\DecValTok{2}\NormalTok{,] }\SpecialCharTok{*} \FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{,}\SpecialCharTok{{-}}\DecValTok{1}\NormalTok{))) }\SpecialCharTok{{-}}
+          \FloatTok{0.1}  \SpecialCharTok{*}\NormalTok{ t\_prime}\SpecialCharTok{\^{}}\NormalTok{(}\FloatTok{1.1}\NormalTok{) }\SpecialCharTok{*} \FunctionTok{exp}\NormalTok{(}\FunctionTok{sum}\NormalTok{(newdata[}\DecValTok{2}\NormalTok{,] }\SpecialCharTok{*} \FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{,}\SpecialCharTok{{-}}\DecValTok{1}\NormalTok{)))))}
+\NormalTok{\}}
+\CommentTok{\# Evaluate the true survival functions at these time points}
+\NormalTok{time\_points }\OtherTok{\textless{}{-}}\NormalTok{ y.pred}\SpecialCharTok{$}\NormalTok{time.interest}
+\NormalTok{true\_surv1 }\OtherTok{\textless{}{-}} \FunctionTok{sapply}\NormalTok{(time\_points, }\AttributeTok{FUN =}\NormalTok{ true\_surv\_death\_func1)}
+\NormalTok{true\_surv2 }\OtherTok{\textless{}{-}} \FunctionTok{sapply}\NormalTok{(time\_points, }\AttributeTok{FUN =}\NormalTok{ true\_surv\_death\_func2)}
+\end{Highlighting}
+\end{Shaded}
+
+Visualizing fit
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{par}\NormalTok{(}\AttributeTok{mfrow =} \FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{,}\DecValTok{1}\NormalTok{), }\AttributeTok{cex.axis =} \FloatTok{2.0}\NormalTok{, }\AttributeTok{cex.lab =} \FloatTok{2.0}\NormalTok{, }\AttributeTok{cex.main =} \FloatTok{2.0}\NormalTok{, }\AttributeTok{mar =} \FunctionTok{c}\NormalTok{(}\FloatTok{6.0}\NormalTok{,}\DecValTok{6}\NormalTok{,}\DecValTok{1}\NormalTok{,}\DecValTok{1}\NormalTok{), }\AttributeTok{mgp =} \FunctionTok{c}\NormalTok{(}\DecValTok{4}\NormalTok{, }\DecValTok{1}\NormalTok{, }\DecValTok{0}\NormalTok{))}
+\FunctionTok{plot}\NormalTok{(}\FunctionTok{round}\NormalTok{(y.pred}\SpecialCharTok{$}\NormalTok{time.interest,}\DecValTok{2}\NormalTok{),y.pred}\SpecialCharTok{$}\NormalTok{survival[}\DecValTok{1}\NormalTok{,], }\AttributeTok{type=}\StringTok{"l"}\NormalTok{, }\AttributeTok{xlab=}\StringTok{"Time (Year)"}\NormalTok{,}
+     \AttributeTok{ylab=}\StringTok{"Survival"}\NormalTok{, }\AttributeTok{col=}\DecValTok{1}\NormalTok{, }\AttributeTok{lty=}\DecValTok{1}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{, }\AttributeTok{xlim =} \FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{,}\DecValTok{5}\NormalTok{))}
+\FunctionTok{lines}\NormalTok{(}\FunctionTok{round}\NormalTok{(y.pred}\SpecialCharTok{$}\NormalTok{time.interest,}\DecValTok{2}\NormalTok{), y.pred}\SpecialCharTok{$}\NormalTok{survival[}\DecValTok{2}\NormalTok{,], }\AttributeTok{col=}\DecValTok{2}\NormalTok{, }\AttributeTok{lty=}\DecValTok{1}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{)}
+\CommentTok{\# Add lines for the true survival functions}
+\FunctionTok{lines}\NormalTok{(time\_points, true\_surv1, }\AttributeTok{col=}\DecValTok{1}\NormalTok{, }\AttributeTok{lty=}\DecValTok{2}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{)  }\CommentTok{\# Dashed line for func1}
+\FunctionTok{lines}\NormalTok{(time\_points, true\_surv2, }\AttributeTok{col=}\DecValTok{2}\NormalTok{, }\AttributeTok{lty=}\DecValTok{2}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{)  }\CommentTok{\# Dot{-}dashed line for func2}
+\FunctionTok{legend}\NormalTok{(}\StringTok{"topright"}\NormalTok{, }
+       \AttributeTok{legend=}\FunctionTok{c}\NormalTok{(}\StringTok{"A0=1 (Predicted)"}\NormalTok{, }\StringTok{"A0=0 (Predicted)"}\NormalTok{, }\StringTok{"A0=1 (True)"}\NormalTok{, }\StringTok{"A0=0 (True)"}\NormalTok{), }
+       \AttributeTok{col=}\FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{2}\NormalTok{, }\DecValTok{1}\NormalTok{, }\DecValTok{2}\NormalTok{), }
+       \AttributeTok{lty=}\FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{1}\NormalTok{, }\DecValTok{2}\NormalTok{, }\DecValTok{2}\NormalTok{), }
+       \AttributeTok{cex=}\FloatTok{0.75}\NormalTok{, }
+       \AttributeTok{lwd=}\DecValTok{2}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\pandocbounded{\includegraphics[keepaspectratio]{RF_predicitons_files/figure-latex/unnamed-chunk-17-1.pdf}}
+
+\subsubsection{Competing Risk}\label{competing-risk-1}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{beta }\OtherTok{\textless{}{-}} \FunctionTok{matrix}\NormalTok{(}\FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{, }\DecValTok{0}\NormalTok{, }\DecValTok{0}\NormalTok{, }\DecValTok{0}\NormalTok{, }\DecValTok{0}\NormalTok{, }\SpecialCharTok{{-}}\FloatTok{0.5}\NormalTok{ , }\FloatTok{0.5}\NormalTok{, }\DecValTok{0}\NormalTok{, }\DecValTok{0}\NormalTok{, }\DecValTok{0}\NormalTok{, }\FloatTok{0.5}\NormalTok{, }\SpecialCharTok{{-}}\FloatTok{0.5}\NormalTok{, }\DecValTok{0}\NormalTok{, }\DecValTok{0}\NormalTok{, }\DecValTok{0}\NormalTok{), }\AttributeTok{ncol =} \DecValTok{3}\NormalTok{)}
+\NormalTok{beta\_TV }\OtherTok{\textless{}{-}} \FunctionTok{matrix}\NormalTok{(}\FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{, }\DecValTok{0}\NormalTok{, }\DecValTok{0}\NormalTok{, }\DecValTok{0}\NormalTok{, }\DecValTok{0}\NormalTok{, }\DecValTok{1}\NormalTok{ , }\SpecialCharTok{{-}}\FloatTok{1.5}\NormalTok{, }\DecValTok{0}\NormalTok{, }\DecValTok{0}\NormalTok{, }\DecValTok{0}\NormalTok{, }\SpecialCharTok{{-}}\DecValTok{1}\NormalTok{, }\DecValTok{1}\NormalTok{, }\DecValTok{0}\NormalTok{, }\DecValTok{0}\NormalTok{, }\DecValTok{0}\NormalTok{), }\AttributeTok{ncol =} \DecValTok{3}\NormalTok{)}
+\NormalTok{t\_prime }\OtherTok{\textless{}{-}} \DecValTok{2}
+\NormalTok{data }\OtherTok{\textless{}{-}} \FunctionTok{simEventTV}\NormalTok{(}\DecValTok{3000}\NormalTok{, }\AttributeTok{beta =}\NormalTok{ beta, }\AttributeTok{term\_deltas =} \FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{,}\DecValTok{1}\NormalTok{,}\DecValTok{2}\NormalTok{), }\AttributeTok{tv\_eff =}\NormalTok{ beta\_TV, }\AttributeTok{t\_prime =}\NormalTok{ t\_prime)}
+\end{Highlighting}
+\end{Shaded}
+
+Fit RSF model
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\#tune.nodesize(Surv(Time,Delta) \textasciitilde{} L0 + A0, data = data)}
+\NormalTok{RF }\OtherTok{\textless{}{-}} \FunctionTok{rfsrc}\NormalTok{(}\FunctionTok{Surv}\NormalTok{(Time, Delta) }\SpecialCharTok{\textasciitilde{}}\NormalTok{ L0 }\SpecialCharTok{+}\NormalTok{ A0, }\AttributeTok{data =}\NormalTok{ data, }\AttributeTok{nodesize =} \DecValTok{150}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+New Data
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{newdata }\OtherTok{\textless{}{-}} \FunctionTok{data.frame}\NormalTok{(}\AttributeTok{L0 =} \FunctionTok{c}\NormalTok{(}\FloatTok{0.5}\NormalTok{,}\FloatTok{0.5}\NormalTok{), }\AttributeTok{A0 =} \FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{,}\DecValTok{0}\NormalTok{))}
+\NormalTok{y.pred }\OtherTok{\textless{}{-}} \FunctionTok{predict}\NormalTok{(RF, }\AttributeTok{newdata =}\NormalTok{ newdata)}
+\end{Highlighting}
+\end{Shaded}
+
+True CHF
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{true\_chf\_func1 }\OtherTok{\textless{}{-}} \ControlFlowTok{function}\NormalTok{(t, cov) \{}
+  \ControlFlowTok{if}\NormalTok{(t }\SpecialCharTok{\textless{}=}\NormalTok{ t\_prime) }\FunctionTok{return}\NormalTok{(}\FloatTok{0.1}  \SpecialCharTok{*}\NormalTok{ t}\SpecialCharTok{\^{}}\NormalTok{(}\FloatTok{1.1}\NormalTok{) }\SpecialCharTok{*} \FunctionTok{exp}\NormalTok{(}\FunctionTok{sum}\NormalTok{(cov }\SpecialCharTok{*} \FunctionTok{c}\NormalTok{(}\SpecialCharTok{{-}}\FloatTok{0.5}\NormalTok{,}\FloatTok{0.5}\NormalTok{))))}
+  \FloatTok{0.1}  \SpecialCharTok{*}\NormalTok{ t\_prime}\SpecialCharTok{\^{}}\NormalTok{(}\FloatTok{1.1}\NormalTok{) }\SpecialCharTok{*} \FunctionTok{exp}\NormalTok{(}\FunctionTok{sum}\NormalTok{(cov }\SpecialCharTok{*} \FunctionTok{c}\NormalTok{(}\SpecialCharTok{{-}}\FloatTok{0.5}\NormalTok{,}\FloatTok{0.5}\NormalTok{))) }\SpecialCharTok{+} 
+  \FloatTok{0.1}  \SpecialCharTok{*}\NormalTok{ t}\SpecialCharTok{\^{}}\NormalTok{(}\FloatTok{1.1}\NormalTok{) }\SpecialCharTok{*} \FunctionTok{exp}\NormalTok{(}\FunctionTok{sum}\NormalTok{(cov }\SpecialCharTok{*} \FunctionTok{c}\NormalTok{(}\FloatTok{0.5}\NormalTok{,}\SpecialCharTok{{-}}\DecValTok{1}\NormalTok{))) }\SpecialCharTok{{-}}
+  \FloatTok{0.1}  \SpecialCharTok{*}\NormalTok{ t\_prime}\SpecialCharTok{\^{}}\NormalTok{(}\FloatTok{1.1}\NormalTok{) }\SpecialCharTok{*} \FunctionTok{exp}\NormalTok{(}\FunctionTok{sum}\NormalTok{(cov }\SpecialCharTok{*} \FunctionTok{c}\NormalTok{(}\FloatTok{0.5}\NormalTok{,}\SpecialCharTok{{-}}\DecValTok{1}\NormalTok{)))}
+\NormalTok{\}}
+\NormalTok{true\_chf\_func2 }\OtherTok{\textless{}{-}} \ControlFlowTok{function}\NormalTok{(t, cov) \{}
+  \ControlFlowTok{if}\NormalTok{(t }\SpecialCharTok{\textless{}=}\NormalTok{ t\_prime) }\FunctionTok{return}\NormalTok{(}\FloatTok{0.1}  \SpecialCharTok{*}\NormalTok{ t}\SpecialCharTok{\^{}}\NormalTok{(}\FloatTok{1.1}\NormalTok{) }\SpecialCharTok{*} \FunctionTok{exp}\NormalTok{(}\FunctionTok{sum}\NormalTok{(cov }\SpecialCharTok{*} \FunctionTok{c}\NormalTok{(}\FloatTok{0.5}\NormalTok{,}\SpecialCharTok{{-}}\FloatTok{0.5}\NormalTok{))))}
+  \FloatTok{0.1}  \SpecialCharTok{*}\NormalTok{ t\_prime}\SpecialCharTok{\^{}}\NormalTok{(}\FloatTok{1.1}\NormalTok{) }\SpecialCharTok{*} \FunctionTok{exp}\NormalTok{(}\FunctionTok{sum}\NormalTok{(cov }\SpecialCharTok{*} \FunctionTok{c}\NormalTok{(}\FloatTok{0.5}\NormalTok{,}\SpecialCharTok{{-}}\FloatTok{0.5}\NormalTok{))) }\SpecialCharTok{+} 
+  \FloatTok{0.1}  \SpecialCharTok{*}\NormalTok{ t}\SpecialCharTok{\^{}}\NormalTok{(}\FloatTok{1.1}\NormalTok{) }\SpecialCharTok{*} \FunctionTok{exp}\NormalTok{(}\FunctionTok{sum}\NormalTok{(cov }\SpecialCharTok{*} \FunctionTok{c}\NormalTok{(}\SpecialCharTok{{-}}\FloatTok{0.5}\NormalTok{,}\FloatTok{0.5}\NormalTok{))) }\SpecialCharTok{{-}}
+  \FloatTok{0.1}  \SpecialCharTok{*}\NormalTok{ t\_prime}\SpecialCharTok{\^{}}\NormalTok{(}\FloatTok{1.1}\NormalTok{) }\SpecialCharTok{*} \FunctionTok{exp}\NormalTok{(}\FunctionTok{sum}\NormalTok{(cov }\SpecialCharTok{*} \FunctionTok{c}\NormalTok{(}\SpecialCharTok{{-}}\FloatTok{0.5}\NormalTok{,}\FloatTok{0.5}\NormalTok{)))}
+\NormalTok{\}}
+
+\CommentTok{\# Evaluate the true CIF functions at time points}
+\NormalTok{time\_points }\OtherTok{\textless{}{-}}\NormalTok{ y.pred}\SpecialCharTok{$}\NormalTok{time.interest}
+\NormalTok{true\_chf11 }\OtherTok{\textless{}{-}} \FunctionTok{sapply}\NormalTok{(time\_points, }\AttributeTok{FUN =} \ControlFlowTok{function}\NormalTok{(t) }\FunctionTok{true\_chf\_func1}\NormalTok{(t, newdata[}\DecValTok{1}\NormalTok{,]))}
+\NormalTok{true\_chf12 }\OtherTok{\textless{}{-}} \FunctionTok{sapply}\NormalTok{(time\_points, }\AttributeTok{FUN =} \ControlFlowTok{function}\NormalTok{(t) }\FunctionTok{true\_chf\_func1}\NormalTok{(t, newdata[}\DecValTok{2}\NormalTok{,]))}
+\NormalTok{true\_chf21 }\OtherTok{\textless{}{-}} \FunctionTok{sapply}\NormalTok{(time\_points, }\AttributeTok{FUN =} \ControlFlowTok{function}\NormalTok{(t) }\FunctionTok{true\_chf\_func2}\NormalTok{(t, newdata[}\DecValTok{1}\NormalTok{,]))}
+\NormalTok{true\_chf22 }\OtherTok{\textless{}{-}} \FunctionTok{sapply}\NormalTok{(time\_points, }\AttributeTok{FUN =} \ControlFlowTok{function}\NormalTok{(t) }\FunctionTok{true\_chf\_func2}\NormalTok{(t, newdata[}\DecValTok{2}\NormalTok{,]))}
+\end{Highlighting}
+\end{Shaded}
+
+Fit Cox models
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{cox1 }\OtherTok{\textless{}{-}} \FunctionTok{coxph}\NormalTok{(}\FunctionTok{Surv}\NormalTok{(Time, Delta }\SpecialCharTok{==} \DecValTok{1}\NormalTok{) }\SpecialCharTok{\textasciitilde{}}\NormalTok{ L0 }\SpecialCharTok{+}\NormalTok{ A0, }\AttributeTok{data =}\NormalTok{ data)}
+\NormalTok{cox2 }\OtherTok{\textless{}{-}} \FunctionTok{coxph}\NormalTok{(}\FunctionTok{Surv}\NormalTok{(Time, Delta }\SpecialCharTok{==} \DecValTok{2}\NormalTok{) }\SpecialCharTok{\textasciitilde{}}\NormalTok{ L0 }\SpecialCharTok{+}\NormalTok{ A0, }\AttributeTok{data =}\NormalTok{ data)}
+\NormalTok{basehazz1 }\OtherTok{\textless{}{-}} \FunctionTok{basehaz}\NormalTok{(cox1, }\AttributeTok{centered =} \ConstantTok{TRUE}\NormalTok{)}
+\NormalTok{basehazz2 }\OtherTok{\textless{}{-}} \FunctionTok{basehaz}\NormalTok{(cox2, }\AttributeTok{centered =} \ConstantTok{TRUE}\NormalTok{)}
+\NormalTok{cox\_term1 }\OtherTok{\textless{}{-}} \FunctionTok{exp}\NormalTok{(}\FunctionTok{predict}\NormalTok{(cox1, }\AttributeTok{newdata=}\NormalTok{newdata, }\AttributeTok{type=}\StringTok{"lp"}\NormalTok{))}
+\NormalTok{cox\_term2 }\OtherTok{\textless{}{-}} \FunctionTok{exp}\NormalTok{(}\FunctionTok{predict}\NormalTok{(cox2, }\AttributeTok{newdata=}\NormalTok{newdata, }\AttributeTok{type=}\StringTok{"lp"}\NormalTok{))}
+\NormalTok{cum\_int1 }\OtherTok{\textless{}{-}} \FunctionTok{outer}\NormalTok{(basehazz1[[}\StringTok{\textquotesingle{}hazard\textquotesingle{}}\NormalTok{]], cox\_term1, }\StringTok{"*"}\NormalTok{)}
+\NormalTok{cum\_int2 }\OtherTok{\textless{}{-}} \FunctionTok{outer}\NormalTok{(basehazz2[[}\StringTok{\textquotesingle{}hazard\textquotesingle{}}\NormalTok{]], cox\_term2, }\StringTok{"*"}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+Plot:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{par}\NormalTok{(}\AttributeTok{mfrow =} \FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{,}\DecValTok{2}\NormalTok{), }\AttributeTok{cex.axis =} \FloatTok{2.0}\NormalTok{, }\AttributeTok{cex.lab =} \FloatTok{2.0}\NormalTok{, }\AttributeTok{cex.main =} \FloatTok{2.0}\NormalTok{, }\AttributeTok{mar =} \FunctionTok{c}\NormalTok{(}\FloatTok{6.0}\NormalTok{,}\DecValTok{6}\NormalTok{,}\DecValTok{1}\NormalTok{,}\DecValTok{1}\NormalTok{), }\AttributeTok{mgp =} \FunctionTok{c}\NormalTok{(}\DecValTok{4}\NormalTok{, }\DecValTok{1}\NormalTok{, }\DecValTok{0}\NormalTok{))}
+\CommentTok{\# Process 1}
+\FunctionTok{plot}\NormalTok{(time\_points,y.pred}\SpecialCharTok{$}\NormalTok{chf[}\DecValTok{1}\NormalTok{,,}\DecValTok{1}\NormalTok{], }\AttributeTok{type=}\StringTok{"l"}\NormalTok{, }\AttributeTok{xlab=}\StringTok{"Time"}\NormalTok{,}
+     \AttributeTok{ylab=}\StringTok{"Process 1 CHF"}\NormalTok{, }\AttributeTok{col=}\DecValTok{1}\NormalTok{, }\AttributeTok{lty=}\DecValTok{1}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{, }\AttributeTok{xlim =} \FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{,}\DecValTok{5}\NormalTok{), }\AttributeTok{ylim =} \FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{,}\DecValTok{1}\NormalTok{))}
+\FunctionTok{lines}\NormalTok{(time\_points, y.pred}\SpecialCharTok{$}\NormalTok{chf[}\DecValTok{2}\NormalTok{,,}\DecValTok{1}\NormalTok{], }\AttributeTok{col=}\DecValTok{1}\NormalTok{, }\AttributeTok{lty=}\DecValTok{2}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{)}
+\CommentTok{\# Add lines for the true survival functions}
+\FunctionTok{lines}\NormalTok{(time\_points, true\_chf11, }\AttributeTok{col=}\DecValTok{2}\NormalTok{, }\AttributeTok{lty=}\DecValTok{1}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{)  }
+\FunctionTok{lines}\NormalTok{(time\_points, true\_chf12, }\AttributeTok{col=}\DecValTok{2}\NormalTok{, }\AttributeTok{lty=}\DecValTok{2}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{)  }
+\FunctionTok{lines}\NormalTok{(basehazz1}\SpecialCharTok{$}\NormalTok{time, cum\_int1[,}\DecValTok{1}\NormalTok{], }\AttributeTok{col=}\DecValTok{3}\NormalTok{, }\AttributeTok{lty=}\DecValTok{1}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{)}
+\FunctionTok{lines}\NormalTok{(basehazz2}\SpecialCharTok{$}\NormalTok{time, cum\_int1[,}\DecValTok{2}\NormalTok{], }\AttributeTok{col=}\DecValTok{3}\NormalTok{, }\AttributeTok{lty=}\DecValTok{2}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{)}
+
+\CommentTok{\# Process 2}
+\FunctionTok{plot}\NormalTok{(time\_points,y.pred}\SpecialCharTok{$}\NormalTok{chf[}\DecValTok{1}\NormalTok{,,}\DecValTok{2}\NormalTok{], }\AttributeTok{type=}\StringTok{"l"}\NormalTok{, }\AttributeTok{xlab=}\StringTok{"Time"}\NormalTok{,}
+     \AttributeTok{ylab=}\StringTok{"Process 2 CHF"}\NormalTok{, }\AttributeTok{col=}\DecValTok{1}\NormalTok{, }\AttributeTok{lty=}\DecValTok{1}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{, }\AttributeTok{xlim =} \FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{,}\DecValTok{5}\NormalTok{), }\AttributeTok{ylim =} \FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{,}\DecValTok{1}\NormalTok{))}
+\FunctionTok{lines}\NormalTok{(time\_points, y.pred}\SpecialCharTok{$}\NormalTok{chf[}\DecValTok{2}\NormalTok{,,}\DecValTok{2}\NormalTok{], }\AttributeTok{col=}\DecValTok{1}\NormalTok{, }\AttributeTok{lty=}\DecValTok{2}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{)}
+\CommentTok{\# Add lines for the true survival functions}
+\FunctionTok{lines}\NormalTok{(time\_points, true\_chf21, }\AttributeTok{col=}\DecValTok{2}\NormalTok{, }\AttributeTok{lty=}\DecValTok{1}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{)  }
+\FunctionTok{lines}\NormalTok{(time\_points, true\_chf22, }\AttributeTok{col=}\DecValTok{2}\NormalTok{, }\AttributeTok{lty=}\DecValTok{2}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{) }
+\FunctionTok{lines}\NormalTok{(basehazz2}\SpecialCharTok{$}\NormalTok{time, cum\_int2[,}\DecValTok{1}\NormalTok{], }\AttributeTok{col=}\DecValTok{3}\NormalTok{, }\AttributeTok{lty=}\DecValTok{1}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{)}
+\FunctionTok{lines}\NormalTok{(basehazz2}\SpecialCharTok{$}\NormalTok{time, cum\_int2[,}\DecValTok{2}\NormalTok{], }\AttributeTok{col=}\DecValTok{3}\NormalTok{, }\AttributeTok{lty=}\DecValTok{2}\NormalTok{, }\AttributeTok{lwd=}\DecValTok{2}\NormalTok{)}
+
+\FunctionTok{legend}\NormalTok{(}\StringTok{"topright"}\NormalTok{, }
+       \AttributeTok{legend =} \FunctionTok{c}\NormalTok{(}\StringTok{"RF CHF A0 = 1"}\NormalTok{, }\StringTok{"RF CHF A0 = 0"}\NormalTok{, }\StringTok{"True CHF A0 = 1"}\NormalTok{, }\StringTok{"True CHF A0 = 0"}\NormalTok{,}
+                  \StringTok{"Cox CHF A0 = 1"}\NormalTok{, }\StringTok{"Cox CHF A0 = 0"}\NormalTok{),}
+       \AttributeTok{col =} \FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{1}\NormalTok{, }\DecValTok{2}\NormalTok{, }\DecValTok{2}\NormalTok{, }\DecValTok{3}\NormalTok{, }\DecValTok{3}\NormalTok{),}
+       \AttributeTok{lty =} \FunctionTok{c}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{2}\NormalTok{, }\DecValTok{1}\NormalTok{, }\DecValTok{2}\NormalTok{, }\DecValTok{1}\NormalTok{, }\DecValTok{2}\NormalTok{),}
+       \AttributeTok{lwd =} \DecValTok{2}\NormalTok{,}
+       \AttributeTok{cex =} \FloatTok{0.75}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\pandocbounded{\includegraphics[keepaspectratio]{RF_predicitons_files/figure-latex/unnamed-chunk-23-1.pdf}}
+
+\subsubsection{General Event History}\label{general-event-history-1}
+
+Yet to be implemented\ldots{}
+
+\end{document}

@@ -1,0 +1,26 @@
+---
+title: "sim_study_RF_vs_Cox"
+output: html_document
+date: "2025-12-08"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+library(randomForestSRC)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(gridExtra)
+library(simevent)
+library(survival)
+```
+
+
+## On Data from randomForestSRC
+
+```{r}
+RF_fit <- rfsrc(Surv(Time, Delta) ~ L0 + A0, data = data, nodesize = 40)
+```
