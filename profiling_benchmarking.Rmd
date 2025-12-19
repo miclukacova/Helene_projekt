@@ -225,6 +225,18 @@ autoplot(my_bench)
 ```
 
 ```{r}
+my_bench <- bench::press(
+  N = 2^(9:12),
+  {bench::mark(
+    "Old" = simEventRF(N, RF_fit, list_old_vars = list_old_vars, parallel = FALSE),
+    "New" = simEventRF2(N, RF_fit, list_old_vars = list_old_vars),
+    check = FALSE)})
+
+summary(my_bench)
+autoplot(my_bench)
+```
+
+```{r}
 time <- rep(1,10^6)
 
 func1 <- function(time) pracma::interp1(times, c(0,cumhazz[i,]), xi = time, method = "linear")

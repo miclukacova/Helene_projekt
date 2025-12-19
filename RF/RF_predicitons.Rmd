@@ -27,17 +27,15 @@ library(survival)
 
 ### Survival 
 
-Simulating data, fitting model, predicting
+Simulating data, fitting model, predicting, 10 times. 
 ```{r}
 set.seed(375)
 beta = matrix(c(0, 0,0.5,-0.5), ncol = 2, nrow = 2)
 newdata <- data.frame(L0 = c(0.5,0.5), A0 = c(1,0))
 y.pred <- list()
 
-for (i in 1:15){
+for (i in 1:10){
   data <- simSurvData(N = 2000, beta = beta)
- 
-  #tune.nodesize(Surv(Time,Delta) ~ L0 + A0, data = data)
   obj <- rfsrc(Surv(Time, Delta == 1) ~ L0 + A0, data = data, nodesize = 10)
    
   y.pred[[i]] <- predict(obj, newdata = newdata)
@@ -119,7 +117,6 @@ true_chf22 <- true_chf_func2(time_points, newdata[2,])
 ```
 
 Plot the true CHF together with the 10 estimated CHF´s
-
 ```{r}
 par(mfrow = c(2, 2), mar   = c(2, 2, 2, 1), cex.axis = 1, 
     cex.lab  = 1, cex.main = 1, mgp = c(2.5, 0.8, 0))  #oma   = c(5, 5, 2, 1)
@@ -137,7 +134,7 @@ title(main = "Process 1, A0 = 1")
 # ---- Process 1, A0 = 0 ----
 plot(time_points, true_chf12, type="l",
      xlab="Time", ylab="CHF",
-     col=2, lty=1, lwd=2, xlim=c(0,10), ylim=c(0, 2))
+     col=2, lty=1, lwd=2, xlim=c(0,10), ylim=c(0, 1))
 for (i in seq_along(y.pred)) {
   lines(y.pred[[i]]$time.interest, y.pred[[i]]$chf[2,,1],
         col=adjustcolor(2, alpha.f=0.3), lty=2, lwd=2)
@@ -209,40 +206,6 @@ legend("topright",
        cex = 0.75)
 ```
 
-### General Event History
-
-Simulate data
-```{r}
-data <- simTreatment(3000)
-data <- IntFormatData(data, N_cols = c(5,6))
-```
-
-We might be able to use this package
-```{r}
-library(recforest)
-```
-
-Train a recforest model
-```{r}
-#set.seed(1234)
-#trained_forest <- train_forest(
-#  data = data,
-#  id_var = "ID",
-#  covariates = c("L0"),
-#  time_vars = c("tstart", "tstop"),
-#  death_var = "death",
-#  event = c("A", "L"),
-#  n_trees = 3,
-#  n_bootstrap = round(2 * nrow(data) / 3),
-#  mtry = 2,
-#  minsplit = 3,
-#  nodesize = 15,
-#  method = "NAa",
-#  min_score = 5,
-#  max_nodes = 20,
-#  seed = 111
-#)
-```
 
 ## On Data not from Cox
 
@@ -252,23 +215,13 @@ Train a recforest model
 beta <- matrix(c(0, 0, 0, 0, -0.5 , 1, 0, 0), ncol = 2)
 beta_TV <- matrix(c(0, 0, 0, 0, 0.5 , -2, 0, 0), ncol = 2)
 t_prime <- 2
-data <- simEventTV(4000, beta = beta, term_deltas = c(0,1), tv_eff = beta_TV, t_prime = t_prime)
-```
-
-Fit model
-```{r} 
-#tune.nodesize(Surv(Time,Delta) ~ L0 + A0, data = data)
+data <- simEventTV(10^4, beta = beta, term_deltas = c(0,1), tv_eff = beta_TV, t_prime = t_prime)
+#Fit model
 obj <- rfsrc(Surv(Time, Delta) ~ L0 + A0, data = data, nodesize = 10)
-```
-
-Predictions
-```{r} 
+# Predictions
 newdata <- data.frame(L0 = c(0.5,0.5), A0 = c(1,0))
 y.pred <- predict(obj, newdata = newdata)
-```
-
-True survival function:
-```{r} 
+# True survival function:
 true_surv_death_func1 <- function(t) {
   if(t <= t_prime) return(exp( - 0.1  * t^(1.1) * exp(sum(newdata[1,] * c(-0.5,1)))))
   exp( - (0.1  * t_prime^(1.1) * exp(sum(newdata[1,] * c(-0.5,1))) + 
@@ -290,12 +243,12 @@ true_surv2 <- sapply(time_points, FUN = true_surv_death_func2)
 Visualizing fit
 ```{r} 
 par(mfrow = c(1,1), cex.axis = 2.0, cex.lab = 2.0, cex.main = 2.0, mar = c(6.0,6,1,1), mgp = c(4, 1, 0))
-plot(round(y.pred$time.interest,2),y.pred$survival[1,], type="l", xlab="Time (Year)",
+plot(round(y.pred$time.interest,2), y.pred$survival[1,], type="l", xlab="Time (Year)",
      ylab="Survival", col=1, lty=1, lwd=2, xlim = c(0,5))
 lines(round(y.pred$time.interest,2), y.pred$survival[2,], col=2, lty=1, lwd=2)
 # Add lines for the true survival functions
-lines(time_points, true_surv1, col=1, lty=2, lwd=2)  # Dashed line for func1
-lines(time_points, true_surv2, col=2, lty=2, lwd=2)  # Dot-dashed line for func2
+lines(time_points, true_surv1, col=1, lty=2, lwd=2) 
+lines(time_points, true_surv2, col=2, lty=2, lwd=2)  
 legend("topright", 
        legend=c("A0=1 (Predicted)", "A0=0 (Predicted)", "A0=1 (True)", "A0=0 (True)"), 
        col=c(1, 2, 1, 2), 
@@ -365,7 +318,7 @@ Plot:
 par(mfrow = c(1,2), cex.axis = 2.0, cex.lab = 2.0, cex.main = 2.0, mar = c(6.0,6,1,1), mgp = c(4, 1, 0))
 # Process 1
 plot(time_points,y.pred$chf[1,,1], type="l", xlab="Time",
-     ylab="Process 1 CHF", col=1, lty=1, lwd=2, xlim = c(0,5), ylim = c(0,1))
+     ylab="Process 1 CHF", col=1, lty=1, lwd=2, xlim = c(0,5), ylim = c(0,75))
 lines(time_points, y.pred$chf[2,,1], col=1, lty=2, lwd=2)
 # Add lines for the true survival functions
 lines(time_points, true_chf11, col=2, lty=1, lwd=2)  
@@ -375,7 +328,7 @@ lines(basehazz2$time, cum_int1[,2], col=3, lty=2, lwd=2)
 
 # Process 2
 plot(time_points,y.pred$chf[1,,2], type="l", xlab="Time",
-     ylab="Process 2 CHF", col=1, lty=1, lwd=2, xlim = c(0,5), ylim = c(0,1))
+     ylab="Process 2 CHF", col=1, lty=1, lwd=2, xlim = c(0,5), ylim = c(0,75))
 lines(time_points, y.pred$chf[2,,2], col=1, lty=2, lwd=2)
 # Add lines for the true survival functions
 lines(time_points, true_chf21, col=2, lty=1, lwd=2)  

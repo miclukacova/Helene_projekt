@@ -1,4 +1,4 @@
----
+  ---
 title: "sim_study_RF_vs_Cox"
 output: html_document
 date: "2025-12-08"
@@ -16,11 +16,122 @@ library(dplyr)
 library(gridExtra)
 library(simevent)
 library(survival)
+library(data.table)
 ```
 
 
-## On Data from randomForestSRC
+# On `follic` Data
+
+We use the `follic` data from the `randomForestSRC` package. 
+```{r}
+data(follic, package = "randomForestSRC")
+```
+
+We fit a model.  
+```{r}
+set.seed(865)
+#tune.nodesize(Surv(time, status) ~ ., follic)
+RF_fit <- rfsrc(Surv(time, status) ~ ., follic, nodesize = 20, nsplit = 3)
+```
+
+## Population absolute risk
+
+Simulate a new very large data set. This will be our truth.
+```{r}
+list_old_vars <- list(age = follic$age, hgb = follic$hgb, clinstg = follic$clinstg, 
+                      ch = follic$ch, rt = follic$rt)
+true_data <- simEventRF(N = 10^6, RF_fit, list_old_vars = list_old_vars, term_events = c(1,2))
+```
+
+We calculate the "true" absolute risk function based on the true data:
+```{r}
+tis <- seq(0.1,25, length.out = 200)
+CIF_true1 <- numeric(10)
+CIF_true2 <- numeric(10)
+i <- 1
+
+for(ti in tis){
+  CIF_true1[i] <- mean(true_data[,(Time <= ti) & Delta == 1])
+  CIF_true2[i] <- mean(true_data[,(Time <= ti) & Delta == 2])
+  i <- i + 1 
+}
+```
 
 ```{r}
-RF_fit <- rfsrc(Surv(Time, Delta) ~ L0 + A0, data = data, nodesize = 40)
+ggplot(tibble(time = tis, true_vals1 = CIF_true1, true_vals2 = CIF_true2))+
+  geom_line(aes(x = time, y = true_vals1, color = "P1 True CIF"), size = 1.1)+
+  geom_line(aes(x = time, y = true_vals2, color = "P2 True CIF"), size = 1.1)+
+  scale_color_manual(values = c("P1 True CIF" = "hotpink", "P2 True CIF" = "forestgreen"))+
+  labs(title = "Absolute Risk")+
+  theme_bw()
 ```
+
+We then simulate 10 normal sized data sets using RF
+```{r}
+N <- 10^4
+new_data <- list(); RF_fits <- list(); Cox_fits1 <- list(); Cox_fits2 <- list();
+for(i in 1:10){
+  new_data[[i]] <- simEventRF(N = 10^4, RF_fit, list_old_vars = list_old_vars, term_events = c(1,2))
+  RF_fits[[i]] <- rfsrc(Surv(Time, Delta) ~ age + hgb + clinstg + ch + rt, 
+                        new_data[[i]], nsplit = 3, ntree = 100)
+  Cox_fits1[[i]] <- coxph(Surv(Time, Delta == 1) ~  age + hgb + clinstg + ch + rt, 
+                         data = new_data[[i]])
+  Cox_fits2[[i]] <- coxph(Surv(Time, Delta == 2) ~  age + hgb + clinstg + ch + rt, 
+                         data = new_data[[i]])
+}
+```
+
+We calculate the population absolute risk using the fitted objects
+
+```{r}
+timesRF <- list()
+CIF_vals1 <- list()
+CIF_vals2 <- list()
+exp_terms1 <- list()
+timesCox1 <- list()
+Haz1 <- list()
+exp_terms2 <- list()
+timesCox2 <- list()
+Haz2 <- list()
+
+for(i in 1:10){
+  # RF
+  timesRF[[i]] <- RF_fits[[i]]$time.interest
+  CIF_vals1[[i]] <- RF_fits[[i]]$cif[,,1] |> colMeans()
+  CIF_vals2[[i]] <- RF_fits[[i]]$cif[,,2] |> colMeans()
+  # Cox 1
+  exp_terms1[[i]] <- predict(Cox_fits1[[i]], type = "lp")
+  timesCox1[[i]] <- basehaz(Cox_fits1[[i]])$time; Haz1[[i]] <- basehaz(Cox_fits1[[i]])$hazard
+  Haz1[[i]] <-  exp(exp_terms1[[i]]) %*% t(Haz1[[i]])
+  Haz1[[i]] <- colMeans(Haz1[[i]])
+  # Cox 2
+  exp_terms2[[i]] <- predict(Cox_fits2[[i]], type = "lp")
+  timesCox2[[i]] <- basehaz(Cox_fits2[[i]])$time; Haz2[[i]] <- basehaz(Cox_fits2[[i]])$hazard
+  Haz2[[i]] <-  exp(exp_terms2[[i]]) %*% t(Haz2[[i]])
+  Haz2[[i]] <- colMeans(Haz2[[i]])
+}
+```
+
+
+```{r}
+ggplot()+
+  geom_line(aes(x = tis, y = CIF_true1, color = "P1 True CIF"), size = 1.1, linetype = 2)+
+  geom_line(aes(x = tis, y = CIF_true2, color = "P2 True CIF"), size = 1.1, linetype= 2)+
+  geom_line(aes(x = timesRF[[i]], y = CIF_vals1[[i]], color = "P1 RF CIF"), size = 1.1)+
+  geom_line(aes(x = timesRF[[i]], y = CIF_vals2[[i]], color = "P2 RF CIF"), size = 1.1)+
+  geom_line(aes(x = timesCox1[[i]], y = Haz1[[i]], color = "P1 Cox CIF"), size = 1.1, linetype= 3)+
+  geom_line(aes(x = timesCox2[[i]], y = Haz2[[i]], color = "P2 Cox CIF"), size = 1.1, linetype= 3)+
+  scale_color_manual(values = c("P1 True CIF" = "pink", "P2 True CIF" = "lightgreen",
+                                "P1 RF CIF" = "hotpink", "P2 RF CIF" = "darkgreen",
+                                "P1 Cox CIF" = "purple", "P2 Cox CIF" = "forestgreen"))+
+  labs(title = "Absolute Risk")+
+  theme_bw()+
+  xlim(c(0,20))+
+  ylim(c(0,1))
+```
+
+
+
+## Absolute risk stratified by treatment
+
+Lav to sande datasæt, et hvor alle får behandling og et hvor ingen får behandling...
