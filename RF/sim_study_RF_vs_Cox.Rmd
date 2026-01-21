@@ -17,6 +17,7 @@ library(gridExtra)
 library(simevent)
 library(survival)
 library(data.table)
+library(purrr)
 ```
 
 
@@ -31,7 +32,7 @@ We fit a model.
 ```{r}
 set.seed(865)
 #tune.nodesize(Surv(time, status) ~ ., follic)
-RF_fit <- rfsrc(Surv(time, status) ~ ., follic, nodesize = 20, nsplit = 3)
+RF_fit <- rfsrc(Surv(time, status) ~ age + hgb + clinstg + ch, follic, nodesize = 20, nsplit = 3)
 ```
 
 ## Population absolute risk
@@ -39,15 +40,15 @@ RF_fit <- rfsrc(Surv(time, status) ~ ., follic, nodesize = 20, nsplit = 3)
 Simulate a new very large data set. This will be our truth.
 ```{r}
 list_old_vars <- list(age = follic$age, hgb = follic$hgb, clinstg = follic$clinstg, 
-                      ch = follic$ch, rt = follic$rt)
+                      ch = follic$ch)
 true_data <- simEventRF(N = 10^6, RF_fit, list_old_vars = list_old_vars, term_events = c(1,2))
 ```
 
-We calculate the "true" absolute risk function based on the true data:
+We calculate the "true" absolute risk function based on the large data set:
 ```{r}
 tis <- seq(0.1,25, length.out = 200)
-CIF_true1 <- numeric(10)
-CIF_true2 <- numeric(10)
+CIF_true1 <- numeric(200)
+CIF_true2 <- numeric(200)
 i <- 1
 
 for(ti in tis){
@@ -57,26 +58,35 @@ for(ti in tis){
 }
 ```
 
-```{r}
+```{r, warning = FALSE}
 ggplot(tibble(time = tis, true_vals1 = CIF_true1, true_vals2 = CIF_true2))+
-  geom_line(aes(x = time, y = true_vals1, color = "P1 True CIF"), size = 1.1)+
-  geom_line(aes(x = time, y = true_vals2, color = "P2 True CIF"), size = 1.1)+
+  geom_line(aes(x = time, y = true_vals1, color = "P1 True CIF"), linewidth = 1.1)+
+  geom_line(aes(x = time, y = true_vals2, color = "P2 True CIF"), linewidth = 1.1)+
   scale_color_manual(values = c("P1 True CIF" = "hotpink", "P2 True CIF" = "forestgreen"))+
-  labs(title = "Absolute Risk")+
-  theme_bw()
+  labs(title = "Absolute Risk", y = "Absolute Risk")+
+  theme_bw()+
+  xlim(c(0,24))+
+  ylim(c(0,0.6))
+
+ggsave("TruePopAbsRisk.pdf")
 ```
 
-We then simulate 10 normal sized data sets using RF
+We then simulate 100 normal sized data sets using `simEventRF`. For each new data set we fit a random forest and cox proportional hazard models. 
+
 ```{r}
-N <- 10^4
+N <- 600
 new_data <- list(); RF_fits <- list(); Cox_fits1 <- list(); Cox_fits2 <- list();
-for(i in 1:10){
-  new_data[[i]] <- simEventRF(N = 10^4, RF_fit, list_old_vars = list_old_vars, term_events = c(1,2))
-  RF_fits[[i]] <- rfsrc(Surv(Time, Delta) ~ age + hgb + clinstg + ch + rt, 
+for(i in 1:100){
+  # Simulate normal size data set
+  new_data[[i]] <- simEventRF(N = N, RF_fit, list_old_vars = list_old_vars, term_events = c(1,2))
+  # RF fit
+  RF_fits[[i]] <- rfsrc(Surv(Time, Delta) ~ age + hgb + clinstg + ch, 
                         new_data[[i]], nsplit = 3, ntree = 100)
-  Cox_fits1[[i]] <- coxph(Surv(Time, Delta == 1) ~  age + hgb + clinstg + ch + rt, 
+  # A Cox fit for process 1
+  Cox_fits1[[i]] <- coxph(Surv(Time, Delta == 1) ~  age + hgb + clinstg + ch, 
                          data = new_data[[i]])
-  Cox_fits2[[i]] <- coxph(Surv(Time, Delta == 2) ~  age + hgb + clinstg + ch + rt, 
+  # A Cox fit for process 2
+  Cox_fits2[[i]] <- coxph(Surv(Time, Delta == 2) ~  age + hgb + clinstg + ch, 
                          data = new_data[[i]])
 }
 ```
@@ -84,54 +94,343 @@ for(i in 1:10){
 We calculate the population absolute risk using the fitted objects
 
 ```{r}
-timesRF <- list()
 CIF_vals1 <- list()
 CIF_vals2 <- list()
-exp_terms1 <- list()
-timesCox1 <- list()
-Haz1 <- list()
-exp_terms2 <- list()
-timesCox2 <- list()
-Haz2 <- list()
+timesCox <- list()
+timesRF <- list()
+AR1 <- list()
+AR2 <- list()
 
-for(i in 1:10){
+for(i in 1:100){
   # RF
   timesRF[[i]] <- RF_fits[[i]]$time.interest
   CIF_vals1[[i]] <- RF_fits[[i]]$cif[,,1] |> colMeans()
   CIF_vals2[[i]] <- RF_fits[[i]]$cif[,,2] |> colMeans()
-  # Cox 1
-  exp_terms1[[i]] <- predict(Cox_fits1[[i]], type = "lp")
-  timesCox1[[i]] <- basehaz(Cox_fits1[[i]])$time; Haz1[[i]] <- basehaz(Cox_fits1[[i]])$hazard
-  Haz1[[i]] <-  exp(exp_terms1[[i]]) %*% t(Haz1[[i]])
-  Haz1[[i]] <- colMeans(Haz1[[i]])
-  # Cox 2
-  exp_terms2[[i]] <- predict(Cox_fits2[[i]], type = "lp")
-  timesCox2[[i]] <- basehaz(Cox_fits2[[i]])$time; Haz2[[i]] <- basehaz(Cox_fits2[[i]])$hazard
-  Haz2[[i]] <-  exp(exp_terms2[[i]]) %*% t(Haz2[[i]])
-  Haz2[[i]] <- colMeans(Haz2[[i]])
+  
+  # Cox
+  # Linear predictors
+  exp_terms1 <- exp(predict(Cox_fits1[[i]], type="lp", reference = "zero"))
+  exp_terms2 <- exp(predict(Cox_fits2[[i]], type="lp", reference = "zero"))
+  # Times
+  timesCox[[i]] <- basehaz(Cox_fits1[[i]])$time
+  # Cause specific cumulative hazards
+  Haz1 <- exp_terms1 %*% t(basehaz(Cox_fits1[[i]], centered = FALSE)$hazard)
+  Haz2 <- exp_terms2 %*% t(basehaz(Cox_fits2[[i]], centered = FALSE)$hazard)
+  # Survival function
+  S <- exp(-(Haz1 + Haz2))
+  # Absolute risk calculation
+  dLambda1 <- t(apply(Haz1, 1, function(x) c(x[1], diff(x))))
+  dLambda2 <- t(apply(Haz2, 1, function(x) c(x[1], diff(x))))
+  AR1[[i]] <- t(apply(S * dLambda1, 1, cumsum))
+  AR1[[i]] <- colMeans(AR1[[i]])
+  AR2[[i]] <- t(apply(S * dLambda2, 1, cumsum))
+  AR2[[i]] <- colMeans(AR2[[i]])
+}
+```
+
+We calculate the mean
+```{r}
+meanRF1 <- colMeans(do.call(rbind(CIF_vals1)))
+meanRF2 <- colMeans(do.call(rbind(CIF_vals2)))
+meanCox1 <- colMeans(do.call(rbind(AR1)))
+meanCox2 <- colMeans(do.call(rbind(AR2)))
+```
+
+
+```{r, warning = F}
+df_plot <- map_dfr(1:100, function(i) {
+  tibble(
+    time  = c(tis,
+              tis,
+              timesRF[[i]],
+              timesRF[[i]],
+              timesCox[[i]],
+              timesCox[[i]]),
+    value = c(CIF_true1,
+              CIF_true2,
+              CIF_vals1[[i]],
+              CIF_vals2[[i]],
+              AR1[[i]],
+              AR2[[i]]),
+    type  = c(rep("True CIF", 2*length(tis)),
+              rep("RF CIF", 2*length(timesRF[[i]])),
+              rep("Cox CIF", 2*length(timesCox[[i]])),
+              rep("Cox CIF", 2*length(timesCox[[i]]))),
+    process = c(rep("P1", length(tis)),
+              rep("P2", length(tis)),
+              rep("P1", length(timesRF[[i]])),
+              rep("P2", length(timesRF[[i]])),
+              rep("P1", length(timesCox[[i]])),
+              rep("P2", length(timesCox[[i]]))),
+    run = i
+  )
+})
+
+ggplot(df_plot, aes(x = time, y = value, color = type,
+                    linetype = type, group = interaction(type, run))) +
+  geom_line(linewidth = 1.1, alpha = 0.7) +
+  scale_color_manual(values = c(
+    "P1 True CIF" = "darkgreen",
+    "P2 True CIF" = "darkgreen",
+    "P1 RF CIF"   = "pink",
+    "P2 RF CIF"   = "pink",
+    "P1 Cox CIF"  = "lightblue",
+    "P2 Cox CIF"  = "lightblue"
+  )) +
+  scale_linetype_manual(values = c(
+    "P1 True CIF" = 1,
+    "P2 True CIF" = 1,
+    "P1 RF CIF"   = 2,
+    "P2 RF CIF"   = 2,
+    "P1 Cox CIF"  = 2,
+    "P2 Cox CIF"  = 2
+  )) +
+  labs(title = "Absolute Risk", y = "Abs Risk") +
+  theme_bw()+
+  xlim(c(0,24))+
+  ylim(c(0,0.6))+
+  facet_wrap(~Process)
+
+ggsave("estimation.pdf", width = 9, height = 6)
+```
+
+
+```{r, warning = FALSE}
+num <- 1
+  
+ggplot()+
+  geom_line(aes(x = tis, y = CIF_true1, color = "P1 True CIF"), linewidth = 1.1, linetype = 2)+
+  geom_line(aes(x = tis, y = CIF_true2, color = "P2 True CIF"), linewidth = 1.1, linetype= 2)+
+  geom_line(aes(x = timesRF[[num]], y = CIF_vals1[[num]], color = "P1 RF CIF"), linewidth = 1.1)+
+  geom_line(aes(x = timesRF[[num]], y = CIF_vals2[[num]], color = "P2 RF CIF"), linewidth = 1.1)+
+  geom_line(aes(x = timesCox[[num]], y = AR1[[num]], color = "P1 Cox CIF"), linewidth = 1.1, linetype= 3)+
+  geom_line(aes(x = timesCox[[num]], y = AR2[[num]], color = "P2 Cox CIF"), linewidth = 1.1, linetype= 3)+
+  scale_color_manual(values = c("P1 True CIF" = "pink", "P2 True CIF" = "lightgreen",
+                                "P1 RF CIF" = "hotpink", "P2 RF CIF" = "darkgreen",
+                                "P1 Cox CIF" = "purple", "P2 Cox CIF" = "forestgreen"))+
+  labs(title = "Absolute Risk", ylab = "Abs Risk")+
+  theme_bw()+
+  xlim(c(0,24))+
+  ylim(c(0,0.6))
+```
+
+## Absolute risk stratified by chemo therapy
+
+We create two new large datasets. One where everybody is on therapy, and one where nobody is on therapy.  
+
+```{r}
+list_old_vars0 <- list(age = follic$age, hgb = follic$hgb, clinstg = follic$clinstg, 
+                      ch =  factor(rep("N", length(follic$ch))))
+list_old_vars1 <- list(age = follic$age, hgb = follic$hgb, clinstg = follic$clinstg, 
+                      ch = factor(rep("Y", length(follic$ch))))
+
+true_data0 <- simEventRF(N = 10^6, RF_fit, list_old_vars = list_old_vars0, term_events = c(1,2))
+true_data1 <- simEventRF(N = 10^6, RF_fit, list_old_vars = list_old_vars1, term_events = c(1,2))
+```
+
+We calculate the "true" absolute risk function of the individuals on treatment and the individuals not on treatment based on the large data set:
+
+```{r}
+tis <- seq(0.1,25, length.out = 200)
+CIF0_true1 <- numeric(200)
+CIF0_true2 <- numeric(200)
+CIF1_true1 <- numeric(200)
+CIF1_true2 <- numeric(200)
+i <- 1
+
+for(ti in tis){
+  CIF0_true1[i] <- mean(true_data0[,(Time <= ti) & Delta == 1])
+  CIF0_true2[i] <- mean(true_data0[,(Time <= ti) & Delta == 2])
+  CIF1_true1[i] <- mean(true_data1[,(Time <= ti) & Delta == 1])
+  CIF1_true2[i] <- mean(true_data1[,(Time <= ti) & Delta == 2])
+  i <- i + 1 
+}
+```
+
+```{r, warning = FALSE}
+ggplot(tibble(time = tis, true0_vals1 = CIF0_true1, true0_vals2 = CIF0_true2,
+                    true1_vals1 = CIF1_true1, true1_vals2 = CIF1_true2))+
+  geom_line(aes(x = time, y = true0_vals1, color = "P1 True CIF, A0 = 0"), linewidth = 1.1, linetype = 2)+
+  geom_line(aes(x = time, y = true0_vals2, color = "P2 True CIF, A0 = 0"), linewidth = 1.1, linetype = 2)+
+  geom_line(aes(x = time, y = true1_vals1, color = "P1 True CIF, A0 = 1"), linewidth = 1.1, linetype = 3)+
+  geom_line(aes(x = time, y = true1_vals2, color = "P2 True CIF, A0 = 1"), linewidth = 1.1, linetype = 3)+
+  scale_color_manual(values = c("P1 True CIF, A0 = 0" = "pink", 
+                                "P2 True CIF, A0 = 0" = "lightgreen",
+                                "P1 True CIF, A0 = 1" = "hotpink",
+                                "P2 True CIF, A0 = 1" = "darkgreen"))+
+  labs(title = "Absolute Risk")+
+  theme_bw()+
+  xlim(c(0,24))+
+  ylim(c(0,0.6))
+
+ggsave("TruePopAbsRisk01.pdf")
+```
+
+We use the 100 simulated data sets of normal size to estimate the absolute risk under treatment and without treatment.
+
+```{r}
+timesRF <- list()
+CIF0_vals1 <- list()
+CIF0_vals2 <- list()
+CIF1_vals1 <- list()
+CIF1_vals2 <- list()
+timesCox <- list();
+AR01 <- list()
+AR02 <- list()
+AR11 <- list()
+AR12 <- list()
+
+for(i in 1:100){
+  # RF
+  timesRF[[i]] <- RF_fits[[i]]$time.interest
+  CIF0_vals1[[i]] <- RF_fits[[i]]$cif[,,1][new_data[[i]]$ch == "N",] |> colMeans()
+  CIF0_vals2[[i]] <- RF_fits[[i]]$cif[,,2][new_data[[i]]$ch == "N",]  |> colMeans()
+  CIF1_vals1[[i]] <- RF_fits[[i]]$cif[,,1][new_data[[i]]$ch == "Y",] |> colMeans()
+  CIF1_vals2[[i]] <- RF_fits[[i]]$cif[,,2][new_data[[i]]$ch == "Y",] |> colMeans()
+  
+  
+  # Cox Without chemo
+  # Linear predictors
+  exp_terms1 <- exp(predict(Cox_fits1[[i]], type="lp", reference = "zero"))[new_data[[i]]$ch == "N"]
+  exp_terms2 <- exp(predict(Cox_fits2[[i]], type="lp", reference = "zero"))[new_data[[i]]$ch == "N"]
+  # Times
+  timesCox[[i]] <- basehaz(Cox_fits1[[i]])$time
+  # Cause specific cumulative hazards
+  Haz1 <- exp_terms1 %*% t(basehaz(Cox_fits1[[i]], centered = FALSE)$hazard)
+  Haz2 <- exp_terms2 %*% t(basehaz(Cox_fits2[[i]], centered = FALSE)$hazard)
+  # Survival function
+  S <- exp(-(Haz1 + Haz2))
+  # Absolute risk calculation
+  dLambda1 <- t(apply(Haz1, 1, function(x) c(x[1], diff(x))))
+  dLambda2 <- t(apply(Haz2, 1, function(x) c(x[1], diff(x))))
+  AR01[[i]] <- t(apply(S * dLambda1, 1, cumsum))
+  AR01[[i]] <- colMeans(AR01[[i]])
+  AR02[[i]] <- t(apply(S * dLambda2, 1, cumsum))
+  AR02[[i]] <- colMeans(AR02[[i]])
+  
+  # Cox With chemo
+  # Linear predictors
+  exp_terms1 <- exp(predict(Cox_fits1[[i]], type="lp", reference = "zero"))[new_data[[i]]$ch == "Y"]
+  exp_terms2 <- exp(predict(Cox_fits2[[i]], type="lp", reference = "zero"))[new_data[[i]]$ch == "Y"]
+  # Times
+  timesCox[[i]] <- basehaz(Cox_fits1[[i]])$time
+  # Cause specific cumulative hazards
+  Haz1 <- exp_terms1 %*% t(basehaz(Cox_fits1[[i]], centered = FALSE)$hazard)
+  Haz2 <- exp_terms2 %*% t(basehaz(Cox_fits2[[i]], centered = FALSE)$hazard)
+  # Survival function
+  S <- exp(-(Haz1 + Haz2))
+  # Absolute risk calculation
+  dLambda1 <- t(apply(Haz1, 1, function(x) c(x[1], diff(x))))
+  dLambda2 <- t(apply(Haz2, 1, function(x) c(x[1], diff(x))))
+  AR11[[i]] <- t(apply(S * dLambda1, 1, cumsum))
+  AR11[[i]] <- colMeans(AR11[[i]])
+  AR12[[i]] <- t(apply(S * dLambda2, 1, cumsum))
+  AR12[[i]] <- colMeans(AR12[[i]])
 }
 ```
 
 
 ```{r}
-ggplot()+
-  geom_line(aes(x = tis, y = CIF_true1, color = "P1 True CIF"), size = 1.1, linetype = 2)+
-  geom_line(aes(x = tis, y = CIF_true2, color = "P2 True CIF"), size = 1.1, linetype= 2)+
-  geom_line(aes(x = timesRF[[i]], y = CIF_vals1[[i]], color = "P1 RF CIF"), size = 1.1)+
-  geom_line(aes(x = timesRF[[i]], y = CIF_vals2[[i]], color = "P2 RF CIF"), size = 1.1)+
-  geom_line(aes(x = timesCox1[[i]], y = Haz1[[i]], color = "P1 Cox CIF"), size = 1.1, linetype= 3)+
-  geom_line(aes(x = timesCox2[[i]], y = Haz2[[i]], color = "P2 Cox CIF"), size = 1.1, linetype= 3)+
-  scale_color_manual(values = c("P1 True CIF" = "pink", "P2 True CIF" = "lightgreen",
-                                "P1 RF CIF" = "hotpink", "P2 RF CIF" = "darkgreen",
-                                "P1 Cox CIF" = "purple", "P2 Cox CIF" = "forestgreen"))+
-  labs(title = "Absolute Risk")+
+df_plot <- map_dfr(1:100, function(i) {
+  tibble(
+    time  = c(tis,
+              tis,
+              timesRF[[i]],
+              timesRF[[i]],
+              timesCox[[i]],
+              timesCox[[i]]),
+    value = c(CIF0_true1,
+              CIF0_true2,
+              CIF0_vals1[[i]],
+              CIF0_vals2[[i]],
+              AR01[[i]],
+              AR02[[i]]),
+    type  = c(rep("P1 True CIF", length(tis)),
+              rep("P2 True CIF", length(tis)),
+              rep("P1 RF CIF", length(timesRF[[i]])),
+              rep("P2 RF CIF", length(timesRF[[i]])),
+              rep("P1 Cox CIF", length(timesCox[[i]])),
+              rep("P2 Cox CIF", length(timesCox[[i]]))),
+    run = i
+  )
+})
+
+ggplot(df_plot, aes(x = time, y = value, color = type,
+                    linetype = type, group = interaction(type, run))) +
+  geom_line(linewidth = 1.1, alpha = 0.7) +
+  scale_color_manual(values = c(
+    "P1 True CIF" = "darkgreen",
+    "P2 True CIF" = "darkgreen",
+    "P1 RF CIF"   = "pink",
+    "P2 RF CIF"   = "pink",
+    "P1 Cox CIF"  = "lightblue",
+    "P2 Cox CIF"  = "lightblue"
+  )) +
+  scale_linetype_manual(values = c(
+    "P1 True CIF" = 1,
+    "P2 True CIF" = 1,
+    "P1 RF CIF"   = 2,
+    "P2 RF CIF"   = 2,
+    "P1 Cox CIF"  = 2,
+    "P2 Cox CIF"  = 2
+  )) +
+  labs(title = "Absolute Risk", y = "Abs Risk") +
   theme_bw()+
-  xlim(c(0,20))+
-  ylim(c(0,1))
+  guides(color = "none", linetype = "none")+
+  xlim(c(0,24))+
+  ylim(c(0,0.6))
+
+ggsave("estimation0.pdf", width = 9, height = 6)
 ```
 
+```{r}
+df_plot <- map_dfr(1:100, function(i) {
+  tibble(
+    time  = c(tis,
+              tis,
+              timesRF[[i]],
+              timesRF[[i]],
+              timesCox[[i]],
+              timesCox[[i]]),
+    value = c(CIF1_true1,
+              CIF1_true2,
+              CIF1_vals1[[i]],
+              CIF1_vals2[[i]],
+              AR11[[i]],
+              AR12[[i]]),
+    type  = c(rep("P1 True CIF", length(tis)),
+              rep("P2 True CIF", length(tis)),
+              rep("P1 RF CIF", length(timesRF[[i]])),
+              rep("P2 RF CIF", length(timesRF[[i]])),
+              rep("P1 Cox CIF", length(timesCox[[i]])),
+              rep("P2 Cox CIF", length(timesCox[[i]]))),
+    run = i
+  )
+})
 
+ggplot(df_plot, aes(x = time, y = value, color = type,
+                    linetype = type, group = interaction(type, run))) +
+  geom_line(linewidth = 1.1, alpha = 0.7) +
+  scale_color_manual(values = c(
+    "P1 True CIF" = "darkgreen",
+    "P2 True CIF" = "darkgreen",
+    "P1 RF CIF"   = "pink",
+    "P2 RF CIF"   = "pink",
+    "P1 Cox CIF"  = "lightblue",
+    "P2 Cox CIF"  = "lightblue"
+  )) +
+  scale_linetype_manual(values = c(
+    "P1 True CIF" = 1,
+    "P2 True CIF" = 1,
+    "P1 RF CIF"   = 2,
+    "P2 RF CIF"   = 2,
+    "P1 Cox CIF"  = 2,
+    "P2 Cox CIF"  = 2
+  )) +
+  labs(title = "Absolute Risk", y = "Abs Risk") +
+  theme_bw()+
+  xlim(c(0,24))+
+  ylim(c(0,0.6))
 
-## Absolute risk stratified by treatment
-
-Lav to sande datasæt, et hvor alle får behandling og et hvor ingen får behandling...
+ggsave("estimation1.pdf", width = 9, height = 6)
+```

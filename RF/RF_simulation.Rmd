@@ -31,7 +31,7 @@ Simulate data
 ```{r}
 set.seed(373)
 beta = matrix(c(1, 0,0.5,1), ncol = 2, nrow = 2)
-data <- simSurvData(N = 1000, beta = beta, cens = 0)
+data <- simSurvData(N = 3000, beta = beta, cens = 0)
 ```
 
 Fit model
@@ -66,6 +66,7 @@ true_chf2 <- true_chf_func2(time_points)
 
 Plot
 ```{r}
+#png(filename="survdatacheck.png")
 par(mfrow = c(1,1), cex.axis = 1.0, cex.lab = 1.0, cex.main = 1.0, mar = c(6.0,6,1,1), mgp = c(4, 1, 0))
 plot(time_points, cum_int1[,1], type="l", xlab="Time (Year)",
      ylab="CHF", col=1, lty=1, lwd=2, xlim = c(0,quantile(new_data$Time, 0.9)),
@@ -80,6 +81,7 @@ legend("topright",
        lty=c(1, 1, 3, 3),
        cex=0.75,
        lwd=2)
+#dev.off()
 ```
 
 
@@ -102,7 +104,7 @@ RF_fit <- rfsrc(Surv(Time, Delta) ~ L0 + A0, data = data, nodesize = 150)
 New Data
 ```{r}
 list_old_vars <- list(L0 = data$L0, A0 = data$A0)
-new_data <- simEventRF(10^4, RF_fit, list_old_vars =list_old_vars, 
+new_data <- simEventRF(2*10^4, RF_fit, list_old_vars =list_old_vars, 
                        n_event_max = c(1,1), term_events = c(1,2))
 ```
 
@@ -133,17 +135,22 @@ true_chf22 <- true_chf_func2(times, covars[2,])
 
 Plot
 ```{r}
+#png(filename="crdatacheck.png")
 par(mfrow = c(1,2), cex.axis = 1.0, cex.lab = 1.0, cex.main = 1.0, mar = c(6.0,6,1,1), mgp = c(4, 1, 0))
 # Process 1
 plot(times, true_chf11, type="l", xlab="Time",
-     ylab="Process 1 CHF", col=1, lty=1, lwd=2, xlim = c(0,quantile(new_data$Time, 0.95)))
+     ylab="Process 1 CHF", col=1, lty=1, lwd=2, 
+     xlim = c(0,quantile(new_data$Time, 0.95)),
+     ylim = c(0,2))
 lines(times, true_chf12, col=1, lty=2, lwd=2)
 lines(times, cum_int1[,1], col=2, lty=1, lwd=2)
 lines(times, cum_int1[,2], col=2, lty=2, lwd=2)
 
 # Process 2
 plot(times,true_chf21, type="l", xlab="Time",
-     ylab="Process 2 CHF", col=1, lty=1, lwd=2, xlim = c(0,quantile(new_data$Time, 0.95)))
+     ylab="Process 2 CHF", col=1, lty=1, lwd=2, 
+     xlim = c(0,quantile(new_data$Time, 0.95)),
+     ylim = c(0,3))
 lines(times, true_chf22, col=1, lty=2, lwd=2)
 lines(times, cum_int2[,1], col=2, lty=1, lwd=2)
 lines(times, cum_int2[,2], col=2, lty=2, lwd=2)
@@ -155,7 +162,7 @@ legend("topright",
        lty = c(1, 2, 1, 2),
        lwd = 2,
        cex = 0.75)
-
+#dev.off()
 ```
 
 # Comparing Simulation Procedures
@@ -371,11 +378,12 @@ data[, Delta := Delta + (Delta == 0) * 2]
 
 We simulate data from the true distribution:
 ```{r}
-N <- 10^5
+N <- 10^6
 true_data <- list()
-for(i in 1:10){
+for(i in 1:5){
   true_data[[i]] <- simEventTV(N, beta = beta, term_deltas = c(0,1), tv_eff = beta_TV, 
                                t_prime = t_prime)
+  print(i)
 }
 true_data <- dplyr::bind_rows(true_data)
 true_data[, Delta := Delta + (Delta == 0) * 2]
@@ -395,7 +403,7 @@ for(ti in tis){
 }
 ```
 
-**Approximating the CIFs using data genereted by Cox**
+**Approximating the CIFs using simEventCox**
 
 Fit Cox models
 ```{r}
@@ -427,7 +435,7 @@ for(ti in tis){
 }
 ```
 
-**Approximating the CIFs using data genereted by Cox**
+**Approximating the CIFs using simEventRF**
 
 Fit RF
 ```{r}
@@ -467,37 +475,47 @@ Q_RF1 <- sum((CIF_RF1 - CIF_true1)^2)
 Q_RF2 <- sum((CIF_RF2 - CIF_true2)^2)
 print(Q_cox1); print(Q_RF1)
 print(Q_cox2); print(Q_RF2)
+
+df3 <- tibble("Model" = c("Q Cox 1", "Q RF 1", "Q Cox 2", "Q RF 2"),
+              "Q" = c(Q_cox1,Q_RF1, Q_cox2, Q_RF2))
+xtable(df3, type = "latex", digits = 3)
 ```
 
 ```{r}
 df1 <- data.frame(
   tis = tis,
   True = CIF_true1,
-  Cox = CIF_cox1 - CIF_true1,
-  RF = CIF_RF1 - CIF_true1
+  Cox = CIF_cox1,
+  RF = CIF_RF1
 ) %>%
-  pivot_longer(cols = c(Cox, RF), names_to = "Model", values_to = "CIF")
+  pivot_longer(cols = c(Cox, RF, True), names_to = "Model", values_to = "CIF")
 
 df2 <- data.frame(
   tis = tis,
-  Cox = CIF_cox2 - CIF_true2,
-  RF = CIF_RF2 - CIF_true2
+  True = CIF_true2,
+  Cox = CIF_cox2,
+  RF = CIF_RF2 
 ) %>%
-  pivot_longer(cols = c(Cox, RF), names_to = "Model", values_to = "CIF")
+  pivot_longer(cols = c(Cox, RF, True), names_to = "Model", values_to = "CIF")
 
 p1 <- ggplot(df1, aes(x = tis, y = CIF, color = Model)) +
   geom_line(linewidth = 1.2) +
-  ylab("CIF Diff") + xlab("Time") +
+  ylab("CIF") + xlab("Time") +
   theme_bw() +
   ggtitle("Process 1") +
-  scale_color_manual(values = c("red", "green4"))
+  scale_color_manual(values = c("red", "green4", "blue3"))+
+  guides(color = FALSE) 
 
 p2 <- ggplot(df2, aes(x = tis, y = CIF, color = Model)) +
   geom_line(linewidth = 1.1) +
-  ylab("CIF Diff") + xlab("Time") +
+  ylab("CIF") + xlab("Time") +
   theme_bw() +
   ggtitle("Process 2") +
-  scale_color_manual(values = c( "red", "green4"))
+  scale_color_manual(values = c( "red", "green4", "blue3"))
 
 gridExtra::grid.arrange(p1,p2, nrow = 1)
+
+ggsave(plot = p1, "Q_compare1.pdf")
+ggsave(plot = p2, "Q_compare2.pdf")
 ```
+
