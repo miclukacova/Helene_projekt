@@ -128,90 +128,158 @@ for(i in 1:100){
 }
 ```
 
-We calculate the mean
+Creating a plot data.frame
+
 ```{r}
-meanRF1 <- colMeans(do.call(rbind(CIF_vals1)))
-meanRF2 <- colMeans(do.call(rbind(CIF_vals2)))
-meanCox1 <- colMeans(do.call(rbind(AR1)))
-meanCox2 <- colMeans(do.call(rbind(AR2)))
-```
-
-
-```{r, warning = F}
 df_plot <- map_dfr(1:100, function(i) {
   tibble(
-    time  = c(tis,
-              tis,
-              timesRF[[i]],
+    time  = c(timesRF[[i]],
               timesRF[[i]],
               timesCox[[i]],
               timesCox[[i]]),
-    value = c(CIF_true1,
-              CIF_true2,
-              CIF_vals1[[i]],
+    value = c(CIF_vals1[[i]],
               CIF_vals2[[i]],
               AR1[[i]],
               AR2[[i]]),
-    type  = c(rep("True CIF", 2*length(tis)),
-              rep("RF CIF", 2*length(timesRF[[i]])),
-              rep("Cox CIF", 2*length(timesCox[[i]])),
+    type  = c(rep("RF CIF", 2*length(timesRF[[i]])),
               rep("Cox CIF", 2*length(timesCox[[i]]))),
-    process = c(rep("P1", length(tis)),
-              rep("P2", length(tis)),
-              rep("P1", length(timesRF[[i]])),
+    process = c(rep("P1", length(timesRF[[i]])),
               rep("P2", length(timesRF[[i]])),
               rep("P1", length(timesCox[[i]])),
               rep("P2", length(timesCox[[i]]))),
     run = i
   )
 })
+```
 
-ggplot(df_plot, aes(x = time, y = value, color = type,
-                    linetype = type, group = interaction(type, run))) +
-  geom_line(linewidth = 1.1, alpha = 0.7) +
+Calculating mean in timepoints
+
+```{r}
+df_mean_cox1 <- matrix(nrow = 100, ncol = length(tis))
+df_mean_cox2 <- matrix(nrow = 100, ncol = length(tis))
+df_mean_RF1 <- matrix(nrow = 100, ncol = length(tis))
+df_mean_RF2 <- matrix(nrow = 100, ncol = length(tis))
+
+for(i in 1:100){
+  df_mean_cox2[i,] <- approx(x = timesCox[[i]], y = AR2[[i]], xout = tis)$y
+  df_mean_cox1[i,] <- approx(x = timesCox[[i]], y = AR1[[i]], xout = tis)$y
+  df_mean_RF1[i,] <- approx(x = timesRF[[i]], y = CIF_vals1[[i]], xout = tis)$y
+  df_mean_RF2[i,] <- approx(x = timesRF[[i]], y = CIF_vals2[[i]], xout = tis)$y
+}
+
+df_mean_cox1 <- colMeans(df_mean_cox1)
+df_mean_cox2 <- colMeans(df_mean_cox2)
+df_mean_RF1 <- colMeans(df_mean_RF1)
+df_mean_RF2 <-colMeans(df_mean_RF2)
+
+df_plot0 <- tibble(
+  time  = rep(tis, 6),                                             
+  value = c(CIF_true1, CIF_true2, df_mean_cox1, df_mean_cox2, df_mean_RF1, df_mean_RF2),  
+  type  = c(rep("True CIF", 2*length(tis)),                                           
+            rep("Mean Cox CIF", 2*length(tis)),
+            rep("Mean RF CIF", 2*length(tis))),
+  process = rep(c(rep("P1", length(tis)), rep("P2", length(tis))), 3),
+  run = 0)
+
+df_plot <- rbind(df_plot, df_plot0)
+df_plot1 <- df_plot[df_plot$process == "P1", ]
+df_plot2 <- df_plot[df_plot$process == "P2", ]
+```
+
+```{r}
+ggplot() +
+
+  ## 1) simulation runs
+  geom_line(
+    data = df_plot1 %>% filter(type %in% c("RF CIF", "Cox CIF")),
+    aes(time, value,
+        color = type,
+        linetype = type,
+        group = interaction(type, run)),
+    alpha = 0.4,
+    linewidth = 0.9
+  ) +
+
+  ## 2) true + mean curves
+  geom_line(
+    data = df_plot1 %>% filter(type %in% c("True CIF", "Mean Cox CIF", "Mean RF CIF")),
+    aes(time, value,
+        color = type,
+        linetype = type),
+    linewidth = 1.2
+  ) +
+
   scale_color_manual(values = c(
-    "P1 True CIF" = "darkgreen",
-    "P2 True CIF" = "darkgreen",
-    "P1 RF CIF"   = "pink",
-    "P2 RF CIF"   = "pink",
-    "P1 Cox CIF"  = "lightblue",
-    "P2 Cox CIF"  = "lightblue"
+    "True CIF"      = "darkgreen",
+    "RF CIF"        = "pink",
+    "Cox CIF"       = "lightblue",
+    "Mean Cox CIF"  = "blue4",
+    "Mean RF CIF"   = "hotpink"
   )) +
-  scale_linetype_manual(values = c(
-    "P1 True CIF" = 1,
-    "P2 True CIF" = 1,
-    "P1 RF CIF"   = 2,
-    "P2 RF CIF"   = 2,
-    "P1 Cox CIF"  = 2,
-    "P2 Cox CIF"  = 2
-  )) +
-  labs(title = "Absolute Risk", y = "Abs Risk") +
-  theme_bw()+
-  xlim(c(0,24))+
-  ylim(c(0,0.6))+
-  facet_wrap(~Process)
 
-ggsave("estimation.pdf", width = 9, height = 6)
+  scale_linetype_manual(values = c(
+    "True CIF"      = 1,
+    "RF CIF"        = 2,
+    "Cox CIF"       = 2,
+    "Mean Cox CIF"  = 1,
+    "Mean RF CIF"   = 1
+  )) +
+
+  labs(title = "Absolute Risk (P1)", y = "Abs Risk") +
+  theme_bw() +
+  xlim(0, 24) +
+  ylim(0, 0.6)
+
+ggsave("estimation1.pdf", width = 9, height = 6)
 ```
 
 
+
 ```{r, warning = FALSE}
-num <- 1
-  
-ggplot()+
-  geom_line(aes(x = tis, y = CIF_true1, color = "P1 True CIF"), linewidth = 1.1, linetype = 2)+
-  geom_line(aes(x = tis, y = CIF_true2, color = "P2 True CIF"), linewidth = 1.1, linetype= 2)+
-  geom_line(aes(x = timesRF[[num]], y = CIF_vals1[[num]], color = "P1 RF CIF"), linewidth = 1.1)+
-  geom_line(aes(x = timesRF[[num]], y = CIF_vals2[[num]], color = "P2 RF CIF"), linewidth = 1.1)+
-  geom_line(aes(x = timesCox[[num]], y = AR1[[num]], color = "P1 Cox CIF"), linewidth = 1.1, linetype= 3)+
-  geom_line(aes(x = timesCox[[num]], y = AR2[[num]], color = "P2 Cox CIF"), linewidth = 1.1, linetype= 3)+
-  scale_color_manual(values = c("P1 True CIF" = "pink", "P2 True CIF" = "lightgreen",
-                                "P1 RF CIF" = "hotpink", "P2 RF CIF" = "darkgreen",
-                                "P1 Cox CIF" = "purple", "P2 Cox CIF" = "forestgreen"))+
-  labs(title = "Absolute Risk", ylab = "Abs Risk")+
-  theme_bw()+
-  xlim(c(0,24))+
-  ylim(c(0,0.6))
+ggplot() +
+
+  ## 1) simulation runs
+  geom_line(
+    data = df_plot2 %>% filter(type %in% c("RF CIF", "Cox CIF")),
+    aes(time, value,
+        color = type,
+        linetype = type,
+        group = interaction(type, run)),
+    alpha = 0.4,
+    linewidth = 0.9
+  ) +
+
+  ## 2) true + mean curves
+  geom_line(
+    data = df_plot2 %>% filter(type %in% c("True CIF", "Mean Cox CIF", "Mean RF CIF")),
+    aes(time, value,
+        color = type,
+        linetype = type),
+    linewidth = 1.2
+  ) +
+
+  scale_color_manual(values = c(
+    "True CIF"      = "darkgreen",
+    "RF CIF"        = "pink",
+    "Cox CIF"       = "lightblue",
+    "Mean Cox CIF"  = "blue4",
+    "Mean RF CIF"   = "hotpink"
+  )) +
+
+  scale_linetype_manual(values = c(
+    "True CIF"      = 1,
+    "RF CIF"        = 2,
+    "Cox CIF"       = 2,
+    "Mean Cox CIF"  = 1,
+    "Mean RF CIF"   = 1
+  )) +
+
+  labs(title = "Absolute Risk (P2)", y = "Abs Risk") +
+  theme_bw() +
+  xlim(0, 24) +
+  ylim(0, 0.3)
+
+ggsave("estimation2.pdf", width = 9, height = 6)
 ```
 
 ## Absolute risk stratified by chemo therapy
@@ -329,108 +397,308 @@ for(i in 1:100){
 }
 ```
 
+Now for the plots. Creating a plot data.frame for no treatment. 
 
 ```{r}
-df_plot <- map_dfr(1:100, function(i) {
+df_plot_notreat <- map_dfr(1:100, function(i) {
   tibble(
-    time  = c(tis,
-              tis,
-              timesRF[[i]],
+    time  = c(timesRF[[i]],
               timesRF[[i]],
               timesCox[[i]],
               timesCox[[i]]),
-    value = c(CIF0_true1,
-              CIF0_true2,
-              CIF0_vals1[[i]],
+    value = c(CIF0_vals1[[i]],
               CIF0_vals2[[i]],
               AR01[[i]],
               AR02[[i]]),
-    type  = c(rep("P1 True CIF", length(tis)),
-              rep("P2 True CIF", length(tis)),
-              rep("P1 RF CIF", length(timesRF[[i]])),
-              rep("P2 RF CIF", length(timesRF[[i]])),
-              rep("P1 Cox CIF", length(timesCox[[i]])),
-              rep("P2 Cox CIF", length(timesCox[[i]]))),
+    type  = c(rep("RF CIF", 2*length(timesRF[[i]])),
+              rep("Cox CIF", 2*length(timesCox[[i]]))),
+    process = c(rep("P1", length(timesRF[[i]])),
+              rep("P2", length(timesRF[[i]])),
+              rep("P1", length(timesCox[[i]])),
+              rep("P2", length(timesCox[[i]]))),
     run = i
   )
 })
+```
 
-ggplot(df_plot, aes(x = time, y = value, color = type,
-                    linetype = type, group = interaction(type, run))) +
-  geom_line(linewidth = 1.1, alpha = 0.7) +
-  scale_color_manual(values = c(
-    "P1 True CIF" = "darkgreen",
-    "P2 True CIF" = "darkgreen",
-    "P1 RF CIF"   = "pink",
-    "P2 RF CIF"   = "pink",
-    "P1 Cox CIF"  = "lightblue",
-    "P2 Cox CIF"  = "lightblue"
-  )) +
-  scale_linetype_manual(values = c(
-    "P1 True CIF" = 1,
-    "P2 True CIF" = 1,
-    "P1 RF CIF"   = 2,
-    "P2 RF CIF"   = 2,
-    "P1 Cox CIF"  = 2,
-    "P2 Cox CIF"  = 2
-  )) +
-  labs(title = "Absolute Risk", y = "Abs Risk") +
-  theme_bw()+
-  guides(color = "none", linetype = "none")+
-  xlim(c(0,24))+
-  ylim(c(0,0.6))
+Calculating mean in timepoints
 
-ggsave("estimation0.pdf", width = 9, height = 6)
+```{r}
+df_mean_cox01 <- matrix(nrow = 100, ncol = length(tis))
+df_mean_cox02 <- matrix(nrow = 100, ncol = length(tis))
+df_mean_RF01 <- matrix(nrow = 100, ncol = length(tis))
+df_mean_RF02 <- matrix(nrow = 100, ncol = length(tis))
+
+for(i in 1:100){
+  df_mean_cox02[i,] <- approx(x = timesCox[[i]], y = AR02[[i]], xout = tis)$y
+  df_mean_cox01[i,] <- approx(x = timesCox[[i]], y = AR01[[i]], xout = tis)$y
+  df_mean_RF01[i,] <- approx(x = timesRF[[i]], y = CIF0_vals1[[i]], xout = tis)$y
+  df_mean_RF02[i,] <- approx(x = timesRF[[i]], y = CIF0_vals2[[i]], xout = tis)$y
+}
+
+df_mean_cox01 <- colMeans(df_mean_cox01)
+df_mean_cox02 <- colMeans(df_mean_cox02)
+df_mean_RF01 <- colMeans(df_mean_RF01)
+df_mean_RF02 <-colMeans(df_mean_RF02)
+
+df_plot0_notreat <- tibble(
+  time  = rep(tis, 6),                                             
+  value = c(CIF0_true1, CIF0_true2, df_mean_cox01, df_mean_cox02, df_mean_RF01, df_mean_RF02),  
+  type  = c(rep("True CIF", 2*length(tis)),                                           
+            rep("Mean Cox CIF", 2*length(tis)),
+            rep("Mean RF CIF", 2*length(tis))),
+  process = rep(c(rep("P1", length(tis)), rep("P2", length(tis))), 3),
+  run = 0)
+
+df_plot_notreat <- rbind(df_plot_notreat, df_plot0_notreat)
+df_plot1 <- df_plot_notreat[df_plot_notreat$process == "P1", ]
+df_plot2 <- df_plot_notreat[df_plot_notreat$process == "P2", ]
 ```
 
 ```{r}
-df_plot <- map_dfr(1:100, function(i) {
+ggplot() +
+
+  ## 1) simulation runs
+  geom_line(
+    data = df_plot1 %>% filter(type %in% c("RF CIF", "Cox CIF")),
+    aes(time, value,
+        color = type,
+        linetype = type,
+        group = interaction(type, run)),
+    alpha = 0.4,
+    linewidth = 0.9
+  ) +
+
+  ## 2) true + mean curves
+  geom_line(
+    data = df_plot1 %>% filter(type %in% c("True CIF", "Mean Cox CIF", "Mean RF CIF")),
+    aes(time, value,
+        color = type,
+        linetype = type),
+    linewidth = 1.2
+  ) +
+
+  scale_color_manual(values = c(
+    "True CIF"      = "darkgreen",
+    "RF CIF"        = "pink",
+    "Cox CIF"       = "lightblue",
+    "Mean Cox CIF"  = "blue4",
+    "Mean RF CIF"   = "hotpink"
+  )) +
+
+  scale_linetype_manual(values = c(
+    "True CIF"      = 1,
+    "RF CIF"        = 2,
+    "Cox CIF"       = 2,
+    "Mean Cox CIF"  = 1,
+    "Mean RF CIF"   = 1
+  )) +
+
+  labs(title = "Absolute Risk (P1 - No Chemo)", y = "Abs Risk") +
+  theme_bw() +
+  xlim(0, 24) +
+  ylim(0, 0.6)
+
+ggsave("estimation3.pdf", width = 9, height = 6)
+```
+
+
+
+```{r, warning = FALSE}
+ggplot() +
+
+  ## 1) simulation runs
+  geom_line(
+    data = df_plot2 %>% filter(type %in% c("RF CIF", "Cox CIF")),
+    aes(time, value,
+        color = type,
+        linetype = type,
+        group = interaction(type, run)),
+    alpha = 0.4,
+    linewidth = 0.9
+  ) +
+
+  ## 2) true + mean curves
+  geom_line(
+    data = df_plot2 %>% filter(type %in% c("True CIF", "Mean Cox CIF", "Mean RF CIF")),
+    aes(time, value,
+        color = type,
+        linetype = type),
+    linewidth = 1.2
+  ) +
+
+  scale_color_manual(values = c(
+    "True CIF"      = "darkgreen",
+    "RF CIF"        = "pink",
+    "Cox CIF"       = "lightblue",
+    "Mean Cox CIF"  = "blue4",
+    "Mean RF CIF"   = "hotpink"
+  )) +
+
+  scale_linetype_manual(values = c(
+    "True CIF"      = 1,
+    "RF CIF"        = 2,
+    "Cox CIF"       = 2,
+    "Mean Cox CIF"  = 1,
+    "Mean RF CIF"   = 1
+  )) +
+
+  labs(title = "Absolute Risk (P2- No Chemo)", y = "Abs Risk") +
+  theme_bw() +
+  xlim(0, 24) +
+  ylim(0, 0.3)
+
+ggsave("estimation4.pdf", width = 9, height = 6)
+```
+Creating a plot data.frame for treatment. 
+
+```{r}
+df_plot_treat <- map_dfr(1:100, function(i) {
   tibble(
-    time  = c(tis,
-              tis,
-              timesRF[[i]],
+    time  = c(timesRF[[i]],
               timesRF[[i]],
               timesCox[[i]],
               timesCox[[i]]),
-    value = c(CIF1_true1,
-              CIF1_true2,
-              CIF1_vals1[[i]],
+    value = c(CIF1_vals1[[i]],
               CIF1_vals2[[i]],
               AR11[[i]],
               AR12[[i]]),
-    type  = c(rep("P1 True CIF", length(tis)),
-              rep("P2 True CIF", length(tis)),
-              rep("P1 RF CIF", length(timesRF[[i]])),
-              rep("P2 RF CIF", length(timesRF[[i]])),
-              rep("P1 Cox CIF", length(timesCox[[i]])),
-              rep("P2 Cox CIF", length(timesCox[[i]]))),
+    type  = c(rep("RF CIF", 2*length(timesRF[[i]])),
+              rep("Cox CIF", 2*length(timesCox[[i]]))),
+    process = c(rep("P1", length(timesRF[[i]])),
+              rep("P2", length(timesRF[[i]])),
+              rep("P1", length(timesCox[[i]])),
+              rep("P2", length(timesCox[[i]]))),
     run = i
   )
 })
-
-ggplot(df_plot, aes(x = time, y = value, color = type,
-                    linetype = type, group = interaction(type, run))) +
-  geom_line(linewidth = 1.1, alpha = 0.7) +
-  scale_color_manual(values = c(
-    "P1 True CIF" = "darkgreen",
-    "P2 True CIF" = "darkgreen",
-    "P1 RF CIF"   = "pink",
-    "P2 RF CIF"   = "pink",
-    "P1 Cox CIF"  = "lightblue",
-    "P2 Cox CIF"  = "lightblue"
-  )) +
-  scale_linetype_manual(values = c(
-    "P1 True CIF" = 1,
-    "P2 True CIF" = 1,
-    "P1 RF CIF"   = 2,
-    "P2 RF CIF"   = 2,
-    "P1 Cox CIF"  = 2,
-    "P2 Cox CIF"  = 2
-  )) +
-  labs(title = "Absolute Risk", y = "Abs Risk") +
-  theme_bw()+
-  xlim(c(0,24))+
-  ylim(c(0,0.6))
-
-ggsave("estimation1.pdf", width = 9, height = 6)
 ```
+
+Calculating mean in timepoints
+
+```{r}
+df_mean_cox11 <- matrix(nrow = 100, ncol = length(tis))
+df_mean_cox12 <- matrix(nrow = 100, ncol = length(tis))
+df_mean_RF11 <- matrix(nrow = 100, ncol = length(tis))
+df_mean_RF12 <- matrix(nrow = 100, ncol = length(tis))
+
+for(i in 1:100){
+  df_mean_cox12[i,] <- approx(x = timesCox[[i]], y = AR12[[i]], xout = tis)$y
+  df_mean_cox11[i,] <- approx(x = timesCox[[i]], y = AR11[[i]], xout = tis)$y
+  df_mean_RF11[i,] <- approx(x = timesRF[[i]], y = CIF1_vals1[[i]], xout = tis)$y
+  df_mean_RF12[i,] <- approx(x = timesRF[[i]], y = CIF1_vals2[[i]], xout = tis)$y
+}
+
+df_mean_cox11 <- colMeans(df_mean_cox11)
+df_mean_cox12 <- colMeans(df_mean_cox12)
+df_mean_RF11 <- colMeans(df_mean_RF11)
+df_mean_RF12 <-colMeans(df_mean_RF12)
+
+df_plot0_treat <- tibble(
+  time  = rep(tis, 6),                                             
+  value = c(CIF1_true1, CIF1_true2, df_mean_cox11, df_mean_cox12, df_mean_RF11, df_mean_RF12),  
+  type  = c(rep("True CIF", 2*length(tis)),                                           
+            rep("Mean Cox CIF", 2*length(tis)),
+            rep("Mean RF CIF", 2*length(tis))),
+  process = rep(c(rep("P1", length(tis)), rep("P2", length(tis))), 3),
+  run = 0)
+
+df_plot_treat <- rbind(df_plot_treat, df_plot0_treat)
+df_plot1 <- df_plot_treat[df_plot_treat$process == "P1", ]
+df_plot2 <- df_plot_treat[df_plot_treat$process == "P2", ]
+```
+
+```{r}
+ggplot() +
+
+  ## 1) simulation runs
+  geom_line(
+    data = df_plot1 %>% filter(type %in% c("RF CIF", "Cox CIF")),
+    aes(time, value,
+        color = type,
+        linetype = type,
+        group = interaction(type, run)),
+    alpha = 0.4,
+    linewidth = 0.9
+  ) +
+
+  ## 2) true + mean curves
+  geom_line(
+    data = df_plot1 %>% filter(type %in% c("True CIF", "Mean Cox CIF", "Mean RF CIF")),
+    aes(time, value,
+        color = type,
+        linetype = type),
+    linewidth = 1.2
+  ) +
+
+  scale_color_manual(values = c(
+    "True CIF"      = "darkgreen",
+    "RF CIF"        = "pink",
+    "Cox CIF"       = "lightblue",
+    "Mean Cox CIF"  = "blue4",
+    "Mean RF CIF"   = "hotpink"
+  )) +
+
+  scale_linetype_manual(values = c(
+    "True CIF"      = 1,
+    "RF CIF"        = 2,
+    "Cox CIF"       = 2,
+    "Mean Cox CIF"  = 1,
+    "Mean RF CIF"   = 1
+  )) +
+
+  labs(title = "Absolute Risk (P1 - Chemo)", y = "Abs Risk") +
+  theme_bw() +
+  xlim(0, 24) +
+  ylim(0, 0.6)
+
+ggsave("estimation5.pdf", width = 9, height = 6)
+```
+
+```{r, warning = FALSE}
+ggplot() +
+
+  ## 1) simulation runs
+  geom_line(
+    data = df_plot2 %>% filter(type %in% c("RF CIF", "Cox CIF")),
+    aes(time, value,
+        color = type,
+        linetype = type,
+        group = interaction(type, run)),
+    alpha = 0.4,
+    linewidth = 0.9
+  ) +
+
+  ## 2) true + mean curves
+  geom_line(
+    data = df_plot2 %>% filter(type %in% c("True CIF", "Mean Cox CIF", "Mean RF CIF")),
+    aes(time, value,
+        color = type,
+        linetype = type),
+    linewidth = 1.2
+  ) +
+
+  scale_color_manual(values = c(
+    "True CIF"      = "darkgreen",
+    "RF CIF"        = "pink",
+    "Cox CIF"       = "lightblue",
+    "Mean Cox CIF"  = "blue4",
+    "Mean RF CIF"   = "hotpink"
+  )) +
+
+  scale_linetype_manual(values = c(
+    "True CIF"      = 1,
+    "RF CIF"        = 2,
+    "Cox CIF"       = 2,
+    "Mean Cox CIF"  = 1,
+    "Mean RF CIF"   = 1
+  )) +
+
+  labs(title = "Absolute Risk (P2 - Chemo)", y = "Abs Risk") +
+  theme_bw() +
+  xlim(0, 24) +
+  ylim(0, 0.3)
+
+ggsave("estimation6.pdf", width = 9, height = 6)
+```
+
