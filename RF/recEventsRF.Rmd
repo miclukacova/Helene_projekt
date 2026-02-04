@@ -1,0 +1,222 @@
+---
+title: "Recurrent Events with the Random Forest"
+output:
+  pdf_document:
+    toc: true
+  html_document:
+    toc: true
+date: "2026-02-04"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+library(randomForestSRC)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(gridExtra)
+library(simevent)
+library(survival)
+```
+
+
+# The Idea
+
+The idea is, in order to be able to simulate recurrent events data with help of the random forest, to divide data into multiple smaller data sets. A data set for T0 -> T1, T1 -> T2 and so on. For each sub data set, we fit a random forest. We use these and `simEventObj` to simulate recurrent events data. 
+
+# Recurrent Event Simulation Function
+
+```{r}
+simEventObjRec <- function(N,
+                           obj,
+                           event_names = NULL,
+                           sim_data = NULL,
+                           T_old = 0,
+                           IDs = 1:N) {
+  
+  ID <- predict2 <- NULL
+  
+  # Initialize last event time
+  T0 <- rep(0, N)
+  
+  # The cumulative hazard and inverse cumulative hazard
+  y.pred <- predict2(obj, sim_data)                                             # Predictions
+  times <-  c(0,y.pred$time)                                                    # Time points
+  chf_mat <- y.pred$chf                                                         # Cumulative hazard for simulated data
+  num_events <- dim(chf_mat)[3]                                                 # Number of events
+  
+  # Creating columns for event counts
+  if(!is.null(event_names)) for (name in event_names) sim_data[[name]] <- 0 else
+    for (name in paste0("N", 1:num_events)) sim_data[[name]] <- 0
+  
+  # Defining the cumulativ hazard and the inverse cumulative hazard
+  cumhaz_fn <- function(t, i, j){
+    idx <- findInterval(t, times)
+    t1 <- times[idx]; t2 <- times[idx + 1]
+    y1 <- chf_mat[cbind(i,idx, j)]; y2 <- chf_mat[cbind(i,(idx + 1), j)]
+    y1 + (t - t1) * (y2 - y1) / (t2 - t1)
+  }
+  
+  invcumhaz_fn <- function(p, i, j){
+    cumhazz <-  chf_mat[,,j]
+    idx <- sapply(1:length(i), FUN = function(k) findInterval(p[k], cumhazz[i[k],]))
+    idx[idx == ncol(cumhazz)] <- ncol(cumhazz) - 1
+    p1 <- cumhazz[cbind(i, idx)]; p2 <- cumhazz[cbind(i,idx + 1)]
+    y1 <- times[idx]; y2 <- times[idx + 1]
+    # If the cumulative hazard flattens, we choose the smallest time
+    y1 + ifelse(p1 == p2, 0, (p - p1) * (y2 - y1) / (p2 - p1))
+  }
+  
+  # Calculate the cumulative intensity per individual per event
+  cum_int_Tk <- matrix(nrow = N, ncol = num_events)
+  for(j in seq_len(num_events)) {
+    cum_int_Tk[,j] <- cumhaz_fn(T0, 1:N, j)
+  }
+  
+  # Simulate the uniform random variable
+  U <- matrix(-log(stats::runif(N * num_events)), ncol = num_events)  # matrix for the random draws
+  V <- U + cum_int_Tk
+  
+  # Find the event times
+  event_times <- matrix(nrow = N, ncol = num_events)
+  for(j in seq_len(num_events)) {
+    event_times[,j] <- invcumhaz_fn(V[,j], 1:N, j)
+  }
+  
+  # The next event is the minimum of these events
+  T_k <- apply(event_times, 1, min)
+  Deltas <- apply(event_times, 1, which.min)
+  
+  # Update event counts
+  for(i in 1:num_events){
+    sim_data[seq_len(N), num_cov + i] <- sim_data[seq_len(N), num_cov + i] + ifelse(Deltas == i, 1, 0)
+  }
+  
+  # Store data
+  kth_event <- data.table(ID = IDs,
+                          Time = T_k + T_old,
+                          Delta = Deltas)
+  
+  res <- cbind(kth_event, data.table::as.data.table(sim_data))
+  data.table::setkey(res, ID)
+  
+  return(res)
+}
+```
+
+
+# Application
+
+Simulate an original recurrent events data set
+```{r}
+set.seed(373)
+data <- simTreatment(1000, cens = 0)
+```
+
+We find the sub data set of T0 -> T1, T1 -> T2 and T2 -> T3
+```{r}
+# T0 -> T1
+data1 <- data[order(Time), .SD[1], by = ID]
+setkey(data1, ID)
+
+# T1 -> T2
+data2A <- data[ID %in% data1[!(Delta %in% c(0,1)) & A == 1, ID], ]
+data2A <- data2A[order(Time), .SD[1:2], by = ID]
+data2A[, newTime := Time - min(Time), by = ID]
+data2A <- data2A[order(Time), .SD[2], by = ID]
+setkey(data2A, ID)
+
+data2L <- data[ID %in% data1[!(Delta %in% c(0,1)) & L == 1, ID], ]
+data2L <- data2L[order(Time), .SD[1:2], by = ID]
+data2L[, newTime := Time - min(Time), by = ID]
+data2L <- data2L[order(Time), .SD[2], by = ID]
+setkey(data2L, ID)
+
+# T2 -> T3
+data3 <- data[ID %in% c(data2A[!(Delta %in% c(0,1)), ID], data2L[!(Delta %in% c(0,1)), ID]), ]
+data3 <- data3[order(Time), .SD[2:3], by = ID]
+data3[, newTime := Time - min(Time), by = ID]
+data3 <- data3[order(Time), .SD[2], by = ID]
+setkey(data3, ID)
+```
+
+Fit models
+```{r}
+set.seed(100)
+# T0 -> T1
+#tune.nodesize(Surv(Time, Delta) ~ L0, data = data1)
+RF_fit1 <- rfsrc(Surv(Time, Delta) ~ L0, data = data1, nodesize = 70)
+
+# T1 -> T2
+#tune.nodesize(Surv(newTime, Delta) ~ L0, data = data2A)
+#tune.nodesize(Surv(newTime, Delta) ~ L0, data = data2L)
+RF_fit2A <- rfsrc(Surv(newTime, Delta) ~L0, data = data2A, nodesize = 60)
+RF_fit2L <- rfsrc(Surv(newTime, Delta) ~L0, data = data2L, nodesize = 20)
+
+# T2 -> T3
+#tune.nodesize(Surv(newTime,Delta) ~ L0 + L + A, data = data3)
+RF_fit3 <- rfsrc(Surv(newTime, Delta) ~ L0, data = data3, nodesize = 20)
+```
+
+Create `predict2`
+```{r}
+predict2 <- function(obj, ...) {
+  UseMethod("predict2")
+}
+predict2.rfsrc <- function(obj, sim_data, ...){
+  preds <- stats::predict(obj, sim_data)
+  if(is.na(dim(preds$chf)[3])){
+    chf <- array(dim = c(dim(preds$chf), 1))
+    chf[,,1] <- preds$chf
+  } else {
+    chf <- preds$chf
+  }
+  list(time = preds$time.interest, chf = chf)
+}
+```
+
+Simulate the recurrent events
+```{r}
+set.seed(100)
+# T0 -> T1
+list_old_vars1 <- list(L0 = data1$L0) 
+new_data1 <- simEventObj(N = 10^4, obj = RF_fit1, list_old_vars = list_old_vars1,
+                         event_names = c("D", "A", "L"))
+N_nextA <- nrow(new_data1[A == 1, ])
+N_nextL <- nrow(new_data1[L == 1, ])
+
+# T1 -> T2
+new_data2A <- simEventObjRec(N = N_nextA, 
+                             obj = RF_fit2A, 
+                             event_names = c("D", "L"), 
+                             sim_data = data.frame(L0 = new_data1[A == 1, L0]), 
+                             T_old = new_data1[A == 1, Time], 
+                             IDs = new_data1[A == 1, ID])
+
+new_data2L <- simEventObjRec(N = N_nextL, 
+                             obj = RF_fit2L, 
+                             event_names = c("D", "A"), 
+                             sim_data = data.frame(L0 = new_data1[L == 1, L0]), 
+                             T_old = new_data1[L == 1, Time], 
+                             IDs = new_data1[L == 1, ID])
+
+# T2 -> T3
+N_next <- nrow(new_data2A[Delta != 1]) + nrow(new_data2L[Delta != 1])
+sim_data <- data.frame(L0 = c(new_data2A[Delta != 1, L0], new_data2L[Delta != 1, L0])) 
+T_old <- c(new_data2A[Delta != 1, Time], new_data2L[Delta != 1, Time])
+IDs <- c(new_data2A[Delta != 1, ID], new_data2L[Delta != 1, ID])
+
+new_data3 <- simEventObjRec(N = N_next, 
+                            obj = RF_fit3, 
+                            event_names = c("D"), 
+                            sim_data = sim_data, 
+                            T_old = T_old, 
+                            IDs = IDs)
+```
+
+
+
+

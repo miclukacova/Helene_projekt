@@ -35,13 +35,30 @@ set.seed(865)
 RF_fit <- rfsrc(Surv(time, status) ~ age + hgb + clinstg + ch, follic, nodesize = 20, nsplit = 3)
 ```
 
+Create `predict2`.
+```{r}
+predict2 <- function(obj, ...) {
+  UseMethod("predict2")
+}
+predict2.rfsrc <- function(obj, sim_data, ...){
+  preds <- stats::predict(obj, sim_data)
+  if(is.na(dim(preds$chf)[3])){
+    chf <- array(dim = c(dim(preds$chf), 1))
+    chf[,,1] <- preds$chf
+  } else {
+    chf <- preds$chf
+  }
+  list(time = preds$time.interest, chf = chf)
+}
+```
+
 ## Population absolute risk
 
 Simulate a new very large data set. This will be our truth.
 ```{r}
 list_old_vars <- list(age = follic$age, hgb = follic$hgb, clinstg = follic$clinstg, 
                       ch = follic$ch)
-true_data <- simEventRF(N = 10^6, RF_fit, list_old_vars = list_old_vars, term_events = c(1,2))
+true_data <- simEventObj(N = 10^6, RF_fit, list_old_vars = list_old_vars)
 ```
 
 We calculate the "true" absolute risk function based on the large data set:
@@ -71,14 +88,14 @@ ggplot(tibble(time = tis, true_vals1 = CIF_true1, true_vals2 = CIF_true2))+
 ggsave("TruePopAbsRisk.pdf")
 ```
 
-We then simulate 100 normal sized data sets using `simEventRF`. For each new data set we fit a random forest and cox proportional hazard models. 
+We then simulate 100 normal sized data sets using `simEventObj`. For each new data set we fit a random forest and cox proportional hazard models. 
 
 ```{r}
 N <- 600
 new_data <- list(); RF_fits <- list(); Cox_fits1 <- list(); Cox_fits2 <- list();
 for(i in 1:100){
   # Simulate normal size data set
-  new_data[[i]] <- simEventRF(N = N, RF_fit, list_old_vars = list_old_vars, term_events = c(1,2))
+  new_data[[i]] <- simEventObj(N = N, RF_fit, list_old_vars = list_old_vars)
   # RF fit
   RF_fits[[i]] <- rfsrc(Surv(Time, Delta) ~ age + hgb + clinstg + ch, 
                         new_data[[i]], nsplit = 3, ntree = 100)
@@ -292,8 +309,8 @@ list_old_vars0 <- list(age = follic$age, hgb = follic$hgb, clinstg = follic$clin
 list_old_vars1 <- list(age = follic$age, hgb = follic$hgb, clinstg = follic$clinstg, 
                       ch = factor(rep("Y", length(follic$ch))))
 
-true_data0 <- simEventRF(N = 10^6, RF_fit, list_old_vars = list_old_vars0, term_events = c(1,2))
-true_data1 <- simEventRF(N = 10^6, RF_fit, list_old_vars = list_old_vars1, term_events = c(1,2))
+true_data0 <- simEventObj(N = 10^6, RF_fit, list_old_vars = list_old_vars0)
+true_data1 <- simEventObj(N = 10^6, RF_fit, list_old_vars = list_old_vars1)
 ```
 
 We calculate the "true" absolute risk function of the individuals on treatment and the individuals not on treatment based on the large data set:
