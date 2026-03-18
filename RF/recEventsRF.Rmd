@@ -21,6 +21,7 @@ library(gridExtra)
 library(simevent)
 library(survival)
 library(data.table)
+library(ggpubr)
 ```
 
 
@@ -37,18 +38,17 @@ simEventObjRec <- function(N,
                            sim_data = NULL,
                            T_old = 0,
                            IDs = 1:N,
-                           num_cov = 1) {
+                           Delta = NULL) {
   
   ID <- predict2 <- NULL
-  
-  # Initialize last event time
-  T0 <- rep(0, N)
   
   # The cumulative hazard and inverse cumulative hazard
   y.pred <- predict2(obj, sim_data)                                             # Predictions
   times <-  c(0,y.pred$time)                                                    # Time points
   chf_mat <- y.pred$chf                                                         # Cumulative hazard for simulated data
   num_events <- dim(chf_mat)[3]                                                 # Number of events
+  num_cov <- ncol(sim_data)                                                     # Number of covariates
+  if(is.null(Delta)) Delta <- 1:num_events
   
   # Creating columns for event counts
   if(!is.null(event_names)) for (name in event_names) sim_data[[name]] <- 0 else
@@ -65,6 +65,7 @@ simEventObjRec <- function(N,
   invcumhaz_fn <- function(p, i, j){
     cumhazz <-  chf_mat[,,j]
     idx <- sapply(1:length(i), FUN = function(k) findInterval(p[k], cumhazz[i[k],]))
+    idx[idx == 0] <- 1
     idx[idx == ncol(cumhazz)] <- ncol(cumhazz) - 1
     p1 <- cumhazz[cbind(i, idx)]; p2 <- cumhazz[cbind(i,idx + 1)]
     y1 <- times[idx]; y2 <- times[idx + 1]
@@ -72,29 +73,22 @@ simEventObjRec <- function(N,
     y1 + ifelse(p1 == p2, 0, (p - p1) * (y2 - y1) / (p2 - p1))
   }
   
-  # Calculate the cumulative intensity per individual per event
-  cum_int_Tk <- matrix(nrow = N, ncol = num_events)
-  for(j in seq_len(num_events)) {
-    cum_int_Tk[,j] <- cumhaz_fn(T0, 1:N, j)
-  }
-  
   # Simulate the uniform random variable
   U <- matrix(-log(stats::runif(N * num_events)), ncol = num_events)  # matrix for the random draws
-  V <- U + cum_int_Tk
   
   # Find the event times
   event_times <- matrix(nrow = N, ncol = num_events)
   for(j in seq_len(num_events)) {
-    event_times[,j] <- invcumhaz_fn(V[,j], 1:N, j)
+    event_times[,j] <- invcumhaz_fn(U[,j], 1:N, j)
   }
   
   # The next event is the minimum of these events
   T_k <- apply(event_times, 1, min)
-  Deltas <- apply(event_times, 1, which.min)
+  Deltas <- Delta[apply(event_times, 1, which.min)]
   
   # Update event counts
   for(i in 1:num_events){
-    sim_data[seq_len(N), num_cov + i] <- sim_data[seq_len(N), num_cov + i] + ifelse(Deltas == i, 1, 0)
+    sim_data[seq_len(N), num_cov + i] <- sim_data[seq_len(N), num_cov + i] + ifelse(Deltas == Delta[i], 1, 0)
   }
   
   # Store data
@@ -115,7 +109,7 @@ simEventObjRec <- function(N,
 Simulate an original recurrent events data set
 ```{r}
 set.seed(373)
-data <- simTreatment(3000, cens = 0)
+data <- simTreatment(2000, cens = 0)
 ```
 
 We find the sub data set of T0 -> T1, T1 -> T2 and T2 -> T3. We split up into data set depending on whether A = 1 or L = 1 because at_risk changes in between. 
@@ -127,20 +121,23 @@ setkey(data1, ID)
 # T1 -> T2
 data2A <- data[ID %in% data1[!(Delta %in% c(0,1)) & A == 1, ID], ]
 data2A <- data2A[order(Time), .SD[1:2], by = ID]
-data2A[, newTime := Time - min(Time), by = ID]
+data2A[, oldTime := min(Time), by = ID]
+data2A[, newTime := Time - oldTime, by = ID]
 data2A <- data2A[order(Time), .SD[2], by = ID]
 setkey(data2A, ID)
 
 data2L <- data[ID %in% data1[!(Delta %in% c(0,1)) & L == 1, ID], ]
 data2L <- data2L[order(Time), .SD[1:2], by = ID]
-data2L[, newTime := Time - min(Time), by = ID]
+data2L[, oldTime := min(Time), by = ID]
+data2L[, newTime := Time - oldTime, by = ID]
 data2L <- data2L[order(Time), .SD[2], by = ID]
 setkey(data2L, ID)
 
 # T2 -> T3
 data3 <- data[ID %in% c(data2A[!(Delta %in% c(0,1)), ID], data2L[!(Delta %in% c(0,1)), ID]), ]
 data3 <- data3[order(Time), .SD[2:3], by = ID]
-data3[, newTime := Time - min(Time), by = ID]
+data3[, oldTime := min(Time), by = ID]
+data3[, newTime := Time - oldTime, by = ID]
 data3 <- data3[order(Time), .SD[2], by = ID]
 setkey(data3, ID)
 ```
@@ -155,12 +152,12 @@ RF_fit1 <- rfsrc(Surv(Time, Delta) ~ L0, data = data1, nodesize = 70)
 # T1 -> T2
 #tune.nodesize(Surv(newTime, Delta) ~ L0, data = data2A)
 #tune.nodesize(Surv(newTime, Delta) ~ L0, data = data2L)
-RF_fit2A <- rfsrc(Surv(newTime, Delta) ~L0, data = data2A, nodesize = 60)
-RF_fit2L <- rfsrc(Surv(newTime, Delta) ~L0, data = data2L, nodesize = 20)
+RF_fit2A <- rfsrc(Surv(newTime, Delta) ~ L0 + oldTime, data = data2A, nodesize = 60)
+RF_fit2L <- rfsrc(Surv(newTime, Delta) ~ L0 + oldTime, data = data2L, nodesize = 20)
 
 # T2 -> T3
 #tune.nodesize(Surv(newTime,Delta) ~ L0 + L + A, data = data3)
-RF_fit3 <- rfsrc(Surv(newTime, Delta) ~ L0, data = data3, nodesize = 20)
+RF_fit3 <- rfsrc(Surv(newTime, Delta) ~ L0 + oldTime, data = data3, nodesize = 20)
 ```
 
 Create `predict2`
@@ -194,21 +191,24 @@ N_nextL <- nrow(new_data1[L == 1, ])
 new_data2A <- simEventObjRec(N = N_nextA, 
                              obj = RF_fit2A, 
                              event_names = c("D", "L"), 
-                             sim_data = data.frame(L0 = new_data1[A == 1, L0]), 
+                             sim_data = data.frame(L0 = new_data1[A == 1, L0], oldTime = new_data1[A == 1, Time]), 
                              T_old = new_data1[A == 1, Time], 
-                             IDs = new_data1[A == 1, ID])
+                             IDs = new_data1[A == 1, ID],
+                             Delta = c(1,3))
 
 new_data2L <- simEventObjRec(N = N_nextL, 
                              obj = RF_fit2L, 
                              event_names = c("D", "A"), 
-                             sim_data = data.frame(L0 = new_data1[L == 1, L0]), 
+                             sim_data = data.frame(L0 = new_data1[L == 1, L0], oldTime = new_data1[L == 1, Time]), 
                              T_old = new_data1[L == 1, Time], 
-                             IDs = new_data1[L == 1, ID])
+                             IDs = new_data1[L == 1, ID],
+                             Delta = c(1,2))
 
 # T2 -> T3
 N_next <- nrow(new_data2A[Delta != 1]) + nrow(new_data2L[Delta != 1])
-sim_data <- data.frame(L0 = c(new_data2A[Delta != 1, L0], new_data2L[Delta != 1, L0])) 
 T_old <- c(new_data2A[Delta != 1, Time], new_data2L[Delta != 1, Time])
+sim_data <- data.frame(L0 = c(new_data2A[Delta != 1, L0], new_data2L[Delta != 1, L0]),
+                       oldTime = T_old) 
 IDs <- c(new_data2A[Delta != 1, ID], new_data2L[Delta != 1, ID])
 
 new_data3 <- simEventObjRec(N = N_next, 
@@ -223,24 +223,23 @@ Collect data into one data set
 
 ```{r}
 # Correcting Covariates
-new_data2A[, A := 1]
-new_data2L[, L := 1]
-new_data3[, c("A", "L") := 1]
+new_data2A[, A := 1][, oldTime := NULL]
+new_data2L[, L := 1][, oldTime := NULL]
+new_data3[, c("A", "L") := 1][, oldTime := NULL]
 
 sim_data <- rbind(new_data1, new_data2A, new_data2L, new_data3)
 setkey(sim_data, ID, Time)
 
-ggarrange(plotEventData(sim_data[1:1000,], title = "Sim Data"), 
+ggarrange(plotEventData(sim_data[1:4000,], title = "Sim Data"), 
           plotEventData(data[1:4000,], title = "Original Data"), ncol = 2)
-
 ```
 Sanity check
 ```{r}
 sim_data <- IntFormatData(sim_data, N_cols = 5:7)
 
-survfit1 <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0 + A + L, data = sim_data[Time < 40])
-survfit2 <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + L, data = sim_data[Time < 40 & A == 0])
-survfit3 <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0 + A, data = sim_data[Time < 40 & L == 0])
+survfit1 <- coxph(Surv(tstart, tstop, Delta == 1) ~ L0 + A + L, data = sim_data)
+survfit2 <- coxph(Surv(tstart, tstop, Delta == 2) ~ L0 + L, data = sim_data[A == 0])
+survfit3 <- coxph(Surv(tstart, tstop, Delta == 3) ~ L0 + A, data = sim_data[L == 0])
 
 # Check estimations
 df <- rbind(cbind(c(1, -1, 1),  confint(survfit1), 1),
@@ -263,38 +262,6 @@ ggplot(df, aes(x = actual, y = Index)) +
 
 # Debugging using simEventCox
 
-```{r}
-set.seed(373)
-data <- simTreatment(3000, cens = 0)
-```
-
-We find the sub data set of T0 -> T1, T1 -> T2 and T2 -> T3. We split up into data set depending on whether A = 1 or L = 1 because at_risk changes in between. 
-```{r}
-# T0 -> T1
-data1 <- data[order(Time), .SD[1], by = ID]
-setkey(data1, ID)
-
-# T1 -> T2
-data2A <- data[ID %in% data1[!(Delta %in% c(0,1)) & A == 1, ID], ]
-data2A <- data2A[order(Time), .SD[1:2], by = ID]
-data2A[, newTime := Time - min(Time), by = ID]
-data2A <- data2A[order(Time), .SD[2], by = ID]
-setkey(data2A, ID)
-
-data2L <- data[ID %in% data1[!(Delta %in% c(0,1)) & L == 1, ID], ]
-data2L <- data2L[order(Time), .SD[1:2], by = ID]
-data2L[, newTime := Time - min(Time), by = ID]
-data2L <- data2L[order(Time), .SD[2], by = ID]
-setkey(data2L, ID)
-
-# T2 -> T3
-data3 <- data[ID %in% c(data2A[!(Delta %in% c(0,1)), ID], data2L[!(Delta %in% c(0,1)), ID]), ]
-data3 <- data3[order(Time), .SD[2:3], by = ID]
-data3[, newTime := Time - min(Time), by = ID]
-data3 <- data3[order(Time), .SD[2], by = ID]
-setkey(data3, ID)
-```
-
 Fit models
 ```{r}
 # T0 -> T1
@@ -303,15 +270,15 @@ survfit_oper1 <- coxph(Surv(Time, Delta == 2) ~ L0, data = data1)
 survfit_cov1 <- coxph(Surv(Time, Delta == 3) ~ L0, data = data1)
 
 # T1 -> T2
-survfit_death2A <- coxph(Surv(newTime, Delta == 1) ~ L0, data = data2A)
-survfit_cov2A <- coxph(Surv(newTime, Delta == 3) ~ L0, data = data2A)
+survfit_death2A <- coxph(Surv(newTime, Delta == 1) ~ L0 + oldTime, data = data2A)
+survfit_cov2A <- coxph(Surv(newTime, Delta == 3) ~ L0 + oldTime, data = data2A)
 
 
-survfit_death2L <- coxph(Surv(newTime, Delta == 1) ~ L0, data = data2L)
-survfit_oper2L <- coxph(Surv(newTime, Delta == 2) ~ L0, data = data2L)
+survfit_death2L <- coxph(Surv(newTime, Delta == 1) ~ L0 + oldTime, data = data2L)
+survfit_oper2L <- coxph(Surv(newTime, Delta == 2) ~ L0 + oldTime, data = data2L)
 
 # T2 -> T3
-survfit_death3 <- coxph(Surv(Time, Delta == 1) ~ L0, data = data3)
+survfit_death3 <- coxph(Surv(Time, Delta == 1) ~ L0 + oldTime, data = data3)
 ```
 
 Simulate the recurrent events.
@@ -359,7 +326,7 @@ class(cox_fits2A) <- "simevent"
 new_data2A <- simEventObjRec(N = N_nextA, 
                              obj = cox_fits2A, 
                              event_names = c("D", "L"), 
-                             sim_data = data.frame(L0 = new_data1[A == 1, L0]), 
+                             sim_data = data.frame(L0 = new_data1[A == 1, L0], oldTime = new_data1[A == 1, Time]), 
                              T_old = new_data1[A == 1, Time], 
                              IDs = new_data1[A == 1, ID])
 
@@ -368,14 +335,15 @@ class(cox_fits2L) <- "simevent"
 new_data2L <- simEventObjRec(N = N_nextL, 
                              obj = cox_fits2L, 
                              event_names = c("D", "A"), 
-                             sim_data = data.frame(L0 = new_data1[L == 1, L0]), 
+                             sim_data = data.frame(L0 = new_data1[L == 1, L0], oldTime = new_data1[L == 1, Time]), 
                              T_old = new_data1[L == 1, Time], 
                              IDs = new_data1[L == 1, ID])
 
 # T2 -> T3
 N_next <- nrow(new_data2A[Delta != 1]) + nrow(new_data2L[Delta != 1])
-sim_data <- data.frame(L0 = c(new_data2A[Delta != 1, L0], new_data2L[Delta != 1, L0])) 
 T_old <- c(new_data2A[Delta != 1, Time], new_data2L[Delta != 1, Time])
+sim_data <- data.frame(L0 = c(new_data2A[Delta != 1, L0], new_data2L[Delta != 1, L0]),
+                       oldTime= T_old) 
 IDs <- c(new_data2A[Delta != 1, ID], new_data2L[Delta != 1, ID])
 cox_fits3 <- list("D" = survfit_death3)
 class(cox_fits3) <- "simevent"
@@ -392,20 +360,16 @@ Collect data into one data set
 
 ```{r}
 # Correcting Covariates
-new_data2A[, A := 1]
-new_data2L[, L := 1]
-new_data3[, c("A", "L") := 1]
+new_data2A[, A := 1][, oldTime := NULL]
+new_data2L[, L := 1][, oldTime := NULL]
+new_data3[, c("A", "L") := 1][, oldTime := NULL]
 sim_data <- rbind(new_data1, new_data2A, new_data2L, new_data3)
 setkey(sim_data, ID, Time)
 
 ggarrange(plotEventData(sim_data[1:2000,], title = "Sim Data"), 
           plotEventData(data[1:2000,], title = "Original Data"), ncol = 2)
 ```
-
-
-It still looks a bit weird, even though we use the cox. Perhaps something goes wrong in the recurrent event simulations...
-
-
+We still get some really large times...
 
 
 
