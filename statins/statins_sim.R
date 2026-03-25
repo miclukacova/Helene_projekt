@@ -11,21 +11,29 @@ library(ggpubr)
 #-------------------------------------------------------------------------------
 # Simulating a dummy trial data set
 #-------------------------------------------------------------------------------
+# There are 6 processes: Censoring, Death, CVD, Off Statins, Treatment, Disease
+
+n_cov <- 7
+n_proc <- 6
 
 # Regression coefficients
-#beta <- matrix(0, nrow = 30, ncol = 6)
-beta <- matrix(runif(30*6, -1, 1), nrow = 30, ncol = 6)
+beta <- matrix(0, nrow = n_cov + n_proc, ncol = n_proc)
+beta[,2] <- c(0, 0, 0.5, 0, 0.1, -0.1, 0.1, 0,0,0, -0.15, 1.1, 0.6)
+beta[,3] <- c(0, 0.35, 0.5, 0, 0.05, 0, 0, 0,0,0, -0.05, 0.5, 0)
 
 # Covariate generating distribution
-data0 <- matrix(sample(c(runif(100*22), rep(0,100*22)), 200*22), nrow = 200, ncol = 22)
 add_cov <- list()
-for(i in 1:22){
-  add_cov[[i]] <- function(N) sample(data0[,i], N, replace = TRUE)
-}
+gen_A0 <- function(N, L0) rbinom(N, 1, 0.14)                                                                  # A0
+gen_L0 <- function(N) rpois(N, 0.1)                                                                           # base_diags
+add_cov[[1]] <- function(N) rbinom(N, 1, 0.4)                                                                 # Sex
+add_cov[[2]] <- function(N) sample(x = 1:4, size = N, prob = c(0.6, 0.1, 0.1, 0.2), replace = TRUE)           # civst
+add_cov[[3]] <- function(N) rexp(N, 0.3) + 70                                                                 # Age
+add_cov[[4]] <- function(N) pmax(rnorm(N, 2, 1), 0.5)                                                         # base_LDL
+add_cov[[5]] <- function(N) rpois(N, 5)                                                                       # base_drugs
 
 # Simulating from simStatinData
-data <- simStatinData(beta = beta, N = 3*10^4, add_cov = add_cov, followup = Inf)
-data <- IntFormatData(data, N_cols = 28:33)
+data <- simStatinData(beta = beta, N = 3*10^4, add_cov = add_cov, followup = Inf, gen_A0 = gen_A0)
+data <- IntFormatData(data, N_cols = (n_cov + 4):(n_cov+n_proc+3))
 
 #-------------------------------------------------------------------------------
 # Fitting Models
@@ -53,19 +61,18 @@ vars <- setdiff(names(data), c("ID", "Time", "k", "C", "D", "CVD", "Delta", "tst
 form <- as.formula(paste("Surv(tstart, tstop, Delta == 4) ~", paste(vars, collapse = " + ")))
 survfit5 <- coxph(form, data = data[A <= 3])
 
-vars <- setdiff(names(data), c("ID", "Time", "k", "C", "D", "CVD",  "Delta", "tstart", "tstop"))
+vars <- setdiff(names(data), c("ID", "Time", "k", "C", "D", "CVD", "Delta", "tstart", "tstop"))
 form <- as.formula(paste("Surv(tstart, tstop, Delta == 5) ~", paste(vars, collapse = " + ")))
 survfit6 <- coxph(form, data = data[L <= 3])
 
 # Check estimations
-df <- rbind(cbind(beta[c(1:24,28:30),1],  confint(survfit1), 1),
-                  cbind(beta[c(1:24,28:30),2],  confint(survfit2), 2))
+df <- rbind(cbind(beta[c(1:n_cov,(n_cov+4):(n_cov +n_proc)),1],  confint(survfit1), 1),
+                  cbind(beta[c(1:n_cov,(n_cov+4):(n_cov +n_proc)),2],  confint(survfit2), 2))
 
-df <- rbind(df, cbind(beta[c(1:24,28:30),3],  confint(survfit3), 3))
-df <- rbind(df, cbind(beta[c(1:24,29:30),4],  confint(survfit4), 4))
-df <- rbind(df, cbind(beta[c(1:24,28:30),5],  confint(survfit5), 5))
-df <- rbind(df, cbind(beta[c(1:24,28:30),6],  confint(survfit6), 6))
-
+df <- rbind(df, cbind(beta[c(1:n_cov,(n_cov+4):(n_cov +n_proc)),3],  confint(survfit3), 3))
+df <- rbind(df, cbind(beta[c(1:n_cov,(n_cov+5):(n_cov +n_proc)),4],  confint(survfit4), 4))
+df <- rbind(df, cbind(beta[c(1:n_cov,(n_cov+4):(n_cov +n_proc)),5],  confint(survfit5), 5))
+df <- rbind(df, cbind(beta[c(1:n_cov,(n_cov+4):(n_cov +n_proc)),6],  confint(survfit6), 6))
 
 
 colnames(df) <- c("actual", "LowCI", "UpCI", "fit")
@@ -86,11 +93,11 @@ ggplot(df, aes(x = actual, y = Index)) +
 #-------------------------------------------------------------------------------
 
 list_old_vars <- list()
-for(var in 4:27){
+for(var in 4:(3+n_cov)){
   list_old_vars[(var - 3)] <- data[,..var]
 }
 
-names(list_old_vars) <- colnames(data[, 4:27])
+names(list_old_vars) <- colnames(data[, 4:(3+n_cov)])
 
 cox_fits <- list(
   "C" = survfit1,
@@ -110,13 +117,12 @@ sim_data0 <- simEventCox(
 )
 
 
-ggarrange(plotEventData(sim_data0[1:500,], title = "Simulated"), 
-          plotEventData(data[1:500,], title = "Original Data"), ncol = 2)
+ggarrange(plotEventData(sim_data0[1:500,], title = "Simulated") + xlim(c(0,1.5)), 
+          plotEventData(data[1:500,], title = "Original Data")+ xlim(c(0,1.5)), ncol = 2)
 
 
 # Sanity check of whether the simulated data corresponds to the original data
-sim_data <- IntFormatData(sim_data0, N_cols = 28:33)
-#sim_data[,Delta := Delta -1]
+sim_data <- IntFormatData(sim_data0, N_cols = (n_cov + 4):(n_cov+n_proc+3))
 
 # Fit models
 # Models where the indidividuals are always at risk
@@ -144,14 +150,13 @@ form <- as.formula(paste("Surv(tstart, tstop, Delta == 5) ~", paste(vars, collap
 survfit6 <- coxph(form, data = sim_data[L < 3])
 
 # Check estimations
-df <- rbind(cbind(beta[c(1:24,28:30),1],  confint(survfit1), 1),
-            cbind(beta[c(1:24,28:30),2],  confint(survfit2), 2))
+df <- rbind(cbind(beta[c(1:n_cov,(n_cov+4):(n_cov +n_proc)),1],  confint(survfit1), 1),
+            cbind(beta[c(1:n_cov,(n_cov+4):(n_cov +n_proc)),2],  confint(survfit2), 2))
 
-df <- rbind(df, cbind(beta[c(1:24,28:30),3],  confint(survfit3), 3))
-df <- rbind(df, cbind(beta[c(1:24,29:30),4],  confint(survfit4), 4))
-df <- rbind(df, cbind(beta[c(1:24,28:30),5],  confint(survfit5), 5))
-df <- rbind(df, cbind(beta[c(1:24,28:30),6],  confint(survfit6), 6))
-
+df <- rbind(df, cbind(beta[c(1:n_cov,(n_cov+4):(n_cov +n_proc)),3],  confint(survfit3), 3))
+df <- rbind(df, cbind(beta[c(1:n_cov,(n_cov+5):(n_cov +n_proc)),4],  confint(survfit4), 4))
+df <- rbind(df, cbind(beta[c(1:n_cov,(n_cov+4):(n_cov +n_proc)),5],  confint(survfit5), 5))
+df <- rbind(df, cbind(beta[c(1:n_cov,(n_cov+4):(n_cov +n_proc)),6],  confint(survfit6), 6))
 
 
 colnames(df) <- c("actual", "LowCI", "UpCI", "fit")
@@ -186,8 +191,8 @@ sim_data_int <- simEventCox(
 )
 
 
-ggarrange(plotEventData(sim_data0[ID %in% 1:200], title = "Non intervened"), 
-          plotEventData(sim_data_int[ID %in% 1:200], title = "Intervened"), ncol = 2)
+ggarrange(plotEventData(sim_data0[ID %in% 1:200], title = "Non intervened") + xlim(c(0,1.5)), 
+          plotEventData(sim_data_int[ID %in% 1:200], title = "Intervened")+ xlim(c(0,1.5)), ncol = 2)
 
 
 
@@ -195,18 +200,59 @@ ggarrange(plotEventData(sim_data0[ID %in% 1:200], title = "Non intervened"),
 # Calculate Intervention Effects
 #-------------------------------------------------------------------------------
 
-tau <- 2
+tau <- 5
 
-# Proportion of subjects dying before some time $\tau$
-sim_data0[Delta == 1, mean(Delta == 1 & Time < tau)]
-sim_data_int[Delta == 1, mean(Delta == 1 & Time < tau)]
+# Proportion of subjects dying before time $\tau$
+mean(sim_data0[, any(Delta == 1 & Time < tau)[1], by = "ID"][[2]])
+mean(sim_data_int[, any(Delta == 1 & Time < tau)[1], by = "ID"][[2]])
 
-# Proportion of subjects experiencing Disease
+# Proportion of subjects experiencing MACE before time $\tau$
+mean(sim_data0[, any(Delta == 2 & Time < tau)[1], by = "ID"][[2]])
+mean(sim_data_int[, any(Delta == 2 & Time < tau)[1], by = "ID"][[2]])
+
+# Proportion of subjects experiencing Disease before time tau
 mean(sim_data0[, any(Delta == 5 & Time < tau)[1], by = "ID"][[2]])
 mean(sim_data_int[, any(Delta == 5 & Time < tau)[1], by = "ID"][[2]])
 
-# Proportion of subjects experiencing Treatment
+# Proportion of subjects experiencing Treatment before time tau
 mean(sim_data0[, any(Delta == 4 & Time < tau)[1], by = "ID"][[2]])
 mean(sim_data_int[, any(Delta == 4 & Time < tau)[1], by = "ID"][[2]])
+
+#-------------------------------------------------------------------------------
+# Plot of "5-year risk of MACE" and "5-year risk of death"
+#-------------------------------------------------------------------------------
+
+alphas <- seq(0.5,2, by = 0.1)
+
+#beta <-matrix(0, ncol = n_proc, nrow = n_cov+n_proc)
+#beta[(n_cov+4), c(2,3)] <- 1
+
+risk_alpha <- matrix(nrow = length(alphas), ncol = 2)
+  
+for(i in seq_along(alphas)){
+  print(i)
+  res_sim <- alphaSim(N = 1e5,
+                      eta = rep(0.1,6),
+                      nu = rep(1.1,6),
+                      alpha = alphas[i],
+                      tau = 5,
+                      setting = "Statin",
+                      cens = 0,
+                      beta = beta, 
+                      add_cov = add_cov)
+   
+   risk_alpha[i,] <- unlist(res_sim)
+}
+
+risk_alpha <- data.frame(risk_alpha)
+colnames(risk_alpha) <- c("Death", "MACE")
+
+ggplot(risk_alpha, aes(x = alphas, y = Death)) +
+  geom_line(aes(color = "Death"), linewidth = 2) +
+  geom_line(aes(y = MACE, color = "MACE"), linewidth = 2) +
+  theme_bw()+
+  scale_color_manual(values = c("MACE" = "red", "Death" = "darkgreen"))+
+  xlab(expression(alpha))+
+  ylab("Risk")
 
 

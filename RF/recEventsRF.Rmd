@@ -370,11 +370,9 @@ setkey(sim_data, ID, Time)
 ggarrange(plotEventData(sim_data[1:2000,], title = "Sim Data"), 
           plotEventData(data[1:2000,], title = "Original Data"), ncol = 2)
 
-ggarrange(plotEventData(sim_data[Time < 35][1:2000,], title = "Sim Data"), 
+ggarrange(plotEventData(sim_data[1:2000,], title = "Sim Data"), 
           plotEventData(data[1:2000,], title = "Original Data"), ncol = 2)
 ```
 We still get some really large times...
-
-
 
 
