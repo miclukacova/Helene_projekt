@@ -182,8 +182,10 @@ Simulate the recurrent events
 set.seed(100)
 # T0 -> T1
 list_old_vars1 <- list(L0 = data1$L0) 
-new_data1 <- simEventObj(N = 10^4, obj = RF_fit1, list_old_vars = list_old_vars1,
+new_data1 <- simEventObj(N = 10^4, obj = RF_fit1, 
+                         list_old_vars = list_old_vars1,
                          event_names = c("D", "A", "L"))
+
 N_nextA <- nrow(new_data1[A == 1, ])
 N_nextL <- nrow(new_data1[L == 1, ])
 
@@ -209,6 +211,7 @@ N_next <- nrow(new_data2A[Delta != 1]) + nrow(new_data2L[Delta != 1])
 T_old <- c(new_data2A[Delta != 1, Time], new_data2L[Delta != 1, Time])
 sim_data <- data.frame(L0 = c(new_data2A[Delta != 1, L0], new_data2L[Delta != 1, L0]),
                        oldTime = T_old) 
+
 IDs <- c(new_data2A[Delta != 1, ID], new_data2L[Delta != 1, ID])
 
 new_data3 <- simEventObjRec(N = N_next, 
@@ -314,7 +317,9 @@ set.seed(100)
 list_old_vars1 <- list(L0 = data1$L0) 
 cox_fits1 <- list("D" = survfit_death1, "A" = survfit_oper1,"L" = survfit_cov1)
 class(cox_fits1) <- "simevent"
-new_data1 <- simEventObj(N = 10^4, obj = RF_fit1, list_old_vars = list_old_vars1,
+new_data1 <- simEventObj(N = 5*10^4, 
+                         obj = cox_fits1,
+                         list_old_vars = list_old_vars1,
                          event_names = c("D", "A", "L"))
 
 N_nextA <- nrow(new_data1[A == 1, ])
@@ -350,7 +355,7 @@ cox_fits3 <- list("D" = survfit_death3)
 class(cox_fits3) <- "simevent"
 
 new_data3 <- simEventObjRec(N = N_next, 
-                            obj = RF_fit3, 
+                            obj = cox_fits3, 
                             event_names = c("D"), 
                             sim_data = sim_data, 
                             T_old = T_old, 
@@ -366,13 +371,25 @@ new_data2L[, L := 1][, oldTime := NULL]
 new_data3[, c("A", "L") := 1][, oldTime := NULL]
 sim_data <- rbind(new_data1, new_data2A, new_data2L, new_data3)
 setkey(sim_data, ID, Time)
+```
 
-ggarrange(plotEventData(sim_data[1:2000,], title = "Sim Data"), 
-          plotEventData(data[1:2000,], title = "Original Data"), ncol = 2)
 
+Checking to see whether the simulation approach works
+```{r}
+sim_data[, table(Delta)]/nrow(sim_data)
+data[, table(Delta)]/nrow(data)
+sim_data[, summary(Time)]
+data[, summary(Time)]
+```
+
+
+
+```{r}
 ggarrange(plotEventData(sim_data[1:2000,], title = "Sim Data"), 
           plotEventData(data[1:2000,], title = "Original Data"), ncol = 2)
 ```
 We still get some really large times...
 
+
+Debugging: check that the simulation functions work. Start with the cox and then simeventobj and simple scenarios. 
 

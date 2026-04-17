@@ -17,7 +17,9 @@ n_cov <- 7
 n_proc <- 6
 
 # Regression coefficients
+
 beta <- matrix(0, nrow = n_cov + n_proc, ncol = n_proc)
+beta[,1] <- c(0.07, -0.03, 0, )
 beta[,2] <- c(0, 0, 0.5, 0, 0.1, -0.1, 0.1, 0,0,0, -0.15, 1.1, 0.6)
 beta[,3] <- c(0, 0.35, 0.5, 0, 0.05, 0, 0, 0,0,0, -0.05, 0.5, 0)
 
@@ -32,7 +34,8 @@ add_cov[[4]] <- function(N) pmax(rnorm(N, 2, 1), 0.5)                           
 add_cov[[5]] <- function(N) rpois(N, 5)                                                                       # base_drugs
 
 # Simulating from simStatinData
-data <- simStatinData(beta = beta, N = 3*10^4, add_cov = add_cov, followup = Inf, gen_A0 = gen_A0)
+data <- simStatinData(beta = beta, N = 5*10^4, add_cov = add_cov, followup = Inf, 
+                      gen_A0 = gen_A0, eta = rep(0.01, 6), nu = rep(1.02,6))
 data <- IntFormatData(data, N_cols = (n_cov + 4):(n_cov+n_proc+3))
 
 #-------------------------------------------------------------------------------
@@ -63,6 +66,7 @@ survfit5 <- coxph(form, data = data[A <= 3])
 
 vars <- setdiff(names(data), c("ID", "Time", "k", "C", "D", "CVD", "Delta", "tstart", "tstop"))
 form <- as.formula(paste("Surv(tstart, tstop, Delta == 5) ~", paste(vars, collapse = " + ")))
+
 survfit6 <- coxph(form, data = data[L <= 3])
 
 # Check estimations
@@ -94,7 +98,9 @@ ggplot(df, aes(x = actual, y = Index)) +
 
 list_old_vars <- list()
 for(var in 4:(3+n_cov)){
-  list_old_vars[(var - 3)] <- data[,..var]
+  # Hvad er den rigtige måde at trække på her?
+  #list_old_vars[(var - 3)] <- data[,..var]
+  list_old_vars[(var - 3)] <- data[tstart == 0,..var]
 }
 
 names(list_old_vars) <- colnames(data[, 4:(3+n_cov)])
@@ -116,9 +122,9 @@ sim_data0 <- simEventCox(
   term_events = c(1, 2, 3),
 )
 
-
-ggarrange(plotEventData(sim_data0[1:500,], title = "Simulated") + xlim(c(0,1.5)), 
-          plotEventData(data[1:500,], title = "Original Data")+ xlim(c(0,1.5)), ncol = 2)
+xlimm <- max(range(data[1:500,Time]),range(sim_data0[1:500,Time]))
+ggarrange(plotEventData(sim_data0[1:500,], title = "Simulated") + xlim(c(0,xlimm)), 
+          plotEventData(data[1:500,], title = "Original Data")+ xlim(c(0,xlimm)), ncol = 2)
 
 
 # Sanity check of whether the simulated data corresponds to the original data
