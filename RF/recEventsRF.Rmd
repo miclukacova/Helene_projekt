@@ -316,11 +316,8 @@ set.seed(100)
 # T0 -> T1
 list_old_vars1 <- list(L0 = data1$L0) 
 cox_fits1 <- list("D" = survfit_death1, "A" = survfit_oper1,"L" = survfit_cov1)
-class(cox_fits1) <- "simevent"
-new_data1 <- simEventObj(N = 5*10^4, 
-                         obj = cox_fits1,
-                         list_old_vars = list_old_vars1,
-                         event_names = c("D", "A", "L"))
+new_data1 <- simEventCox(N = 5*10^4, cox_fits = cox_fits1, list_old_vars = list_old_vars1,
+                         n_event_max = c(1, 1, 1), term_events = c(1,1,1))
 
 N_nextA <- nrow(new_data1[A == 1, ])
 N_nextL <- nrow(new_data1[L == 1, ])

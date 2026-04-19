@@ -1,7 +1,7 @@
 # ------------------------------------------------------------------------------
 # Object based on RF
 beta = matrix(c(0.5,-1,-0.5,0.5,0,0.5), ncol = 3, nrow = 2)
-data <- simCRdata(N = 1000, beta = beta)
+data <- simCRdata(N = 5000, beta = beta)
 list_old_vars <- list(L0 = data$L0, A0 = data$A0)
 
 RF_fit <- randomForestSRC::rfsrc(Surv(Time, Delta) ~ L0 + A0, data = data)
@@ -21,7 +21,16 @@ predict2.rfsrc <- function(obj, sim_data, ...){
 }
 
 # New data
-new_data <- simEventObj(100, RF_fit, list_old_vars = list_old_vars)
+new_data <- simEventObj(5000, RF_fit, list_old_vars = list_old_vars)
+
+ggarrange(plotEventData(new_data, title = "Sim Data"),
+          plotEventData(data, title = "Original Data"), ncol = 2)
+
+new_data[, table(Delta)]/nrow(new_data)
+data_obs[, table(Delta)]/nrow(data_obs)
+new_data[, summary(Time)]
+data_obs[, summary(Time)]
+
 
 # ------------------------------------------------------------------------------
 # Object based on Cox
