@@ -27,13 +27,16 @@ rownames(beta) <- c(
 )
 colnames(beta) <- c("C", "D", "CVD", "OS", "L", "A", "LDL1", "LDL2")
 
-beta[c(1:10,14:nrow(beta)),1] <- c(-0.025, 0.001, 0.021, 0.005, -0.008, 
-                              -0.081, -0.008, 0.009, -0.023, 0.014,
-                              -0.047, -0.042, -0.024, -0.001, -0.058)
+#beta[c(1:10,14:nrow(beta)),1] <- c(-0.025, 0.001, 0.021, 0.005, -0.008, 
+#                              -0.081, -0.008, 0.009, -0.023, 0.014,
+#                              -0.047, -0.042, -0.024, -0.001, -0.058)
 
 beta[c(1:10,14:nrow(beta)),2] <- c(-0.439, 0.065, 1.003, 0.599, 1.033,
                               1.198, -0.236, -0.110, 0, 0.077,
                               0.245, 0.557, 0.479, -0.201, 0.139)
+
+# hvis jeg halvere koefficienterne her så ser det lidt bedre ud(?)
+beta[,2] <- beta[,2]/4
 
 beta[c(1:10,14:nrow(beta)),3] <- c(-0.558, 0.034, 0.776, 0.188, 0.558,
                               0, -0.024, 0.030, 0.129, 0.038,
@@ -62,23 +65,26 @@ beta[c(1:10,14:nrow(beta)),8] <- c(-0.181, -0.061, 0.418, 0.413, 0.560,
 # Covariate generating distribution
 add_cov <- list()
 
-gen_A0 <- function(N, L0) rbinom(N, 1, 0.4)                                                                   # koen
-gen_L0 <- function(N) rexp(N, 0.3) + 70                                                                       # alder
+gen_L0 <- function(N) rbinom(N, 1, 0.4)                                                                       # koen
+gen_A0 <- function(N, L0) pmin(rexp(N, 0.3) + 70, 100)                                                        # alder
 add_cov[[1]] <- function(N) rbinom(N, 1, 0.16)                                                                # civst 1
 add_cov[[2]] <- function(N) rbinom(N, 1, 0.11)                                                                # civst 2
 add_cov[[3]] <- function(N) rbinom(N, 1, 0.6)                                                                 # civst 3
 add_cov[[4]] <- function(N) rbinom(N, 1, 0.03)                                                                # civst 4
 #add_cov[[6]] <- function(N) rbinom(N, 1, 0.01)                                                               # civst 5
-add_cov[[5]] <- function(N) rpois(N, 0.1)                                                                     # n_diag_base
-add_cov[[6]] <- function(N) pmax(rnorm(N, 2, 1), 0.5)                                                         # base_LDL
+add_cov[[5]] <- function(N) rpois(N, 0.25)                                                                    # n_diag_base
+add_cov[[6]] <- function(N) pmax(rnorm(N, 2, 1), 0.2)                                                         # base_LDL
 add_cov[[7]] <- function(N) rbinom(N, 1, 0.14)                                                                # A0
 add_cov[[8]] <- function(N) rpois(N, 5)                                                                       # base_drugs
 
-nu <- c(0.932, 0.932, 0.830, 1.372, 0.757, 0.864, 0.623, 0.677)
-eta <- c(5.471e-04, 5.471e-04, 2.775e-03, 5.525e-03, 1.697-02, 4.624e-02, 6.739e-02, 4.768e-02)
+# Estimerede parametre, som vi har fået ved at fitte på event of interest og terminale events
+nu <- c(2.4402339, 1.2381952, 0.8753749, 1.372, 0.757, 0.864, 0.623, 0.677)
+eta <- c(4.352e-08, 6.689-04, 4.801-04, 5.525e-03, 1.697-02, 4.624e-02, 6.739e-02, 4.768e-02)
 
-#eta <- rep(0.001,8)
-#nu <- rep(1.001,8)
+
+# Estimerede parametre, som vi har fået ved at fitte lm fits
+eta <- c(10^-9, 0.001, 10^-9, 0.007, 0.032, 0.045, 0.063, 0.037)
+nu <- c(1.853, 0.855, 0.763, 1.264, 0.743, 0.893, 0.711, 0.689)
 
 # Simulating from simStatinData
 data <- simStatinData(beta = beta, 
@@ -91,10 +97,10 @@ data <- simStatinData(beta = beta,
                       nu = nu,
                       max_iter = 300,
                       lower = 10^(-30),
-                      upper = 5000)
+                      upper = 10^6,
+                      cens = 0)
 
 plotEventData(data[1:2000,])
-
 data <- IntFormatData(data, N_cols = (n_cov + 4):(n_cov+n_proc+3))
 
 #-------------------------------------------------------------------------------
