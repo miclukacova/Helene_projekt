@@ -122,7 +122,7 @@ simEventObjRec <- function(N,
 Simulate an original recurrent events data set
 ```{r}
 set.seed(373)
-data <- simTreatment(2000, cens = 0)
+data <- simTreatment(5*10^4, cens = 0)
 ```
 
 We find the sub data set of T0 -> T1, T1 -> T2 and T2 -> T3. We split up into data set depending on whether A = 1 or L = 1 because at_risk changes in between. 
@@ -286,15 +286,15 @@ survfit_oper1 <- coxph(Surv(Time, Delta == 2) ~ L0, data = data1)
 survfit_cov1 <- coxph(Surv(Time, Delta == 3) ~ L0, data = data1)
 
 # T1 -> T2
-survfit_death2A <- coxph(Surv(newTime, Delta == 1) ~ L0 + oldTime, data = data2A)
-survfit_cov2A <- coxph(Surv(newTime, Delta == 3) ~ L0 + oldTime, data = data2A)
+survfit_death2A <- coxph(Surv(newTime, Delta == 1) ~ L0, data = data2A)
+survfit_cov2A <- coxph(Surv(newTime, Delta == 3) ~ L0, data = data2A)
 
 
-survfit_death2L <- coxph(Surv(newTime, Delta == 1) ~ L0 + oldTime, data = data2L)
-survfit_oper2L <- coxph(Surv(newTime, Delta == 2) ~ L0 + oldTime, data = data2L)
+survfit_death2L <- coxph(Surv(newTime, Delta == 1) ~ L0, data = data2L)
+survfit_oper2L <- coxph(Surv(newTime, Delta == 2) ~ L0, data = data2L)
 
 # T2 -> T3
-survfit_death3 <- coxph(Surv(Time, Delta == 1) ~ L0 + oldTime, data = data3)
+survfit_death3 <- coxph(Surv(Time, Delta == 1) ~ L0, data = data3)
 ```
 
 Simulate the recurrent events.
@@ -361,6 +361,7 @@ new_data2L <- simEventObjRec(N = N_nextL,
 
 # T2 -> T3
 N_next <- nrow(new_data2A[Delta != 0]) + nrow(new_data2L[Delta != 0])
+
 T_old <- c(new_data2A[Delta != 0, Time], new_data2L[Delta != 0, Time])
 sim_data <- data.frame(L0 = c(new_data2A[Delta != 0, L0], new_data2L[Delta != 0, L0]),
                        oldTime= T_old) 
@@ -392,19 +393,50 @@ setkey(sim_data, ID, Time)
 Checking to see whether the simulation approach works
 ```{r}
 sim_data[, table(Delta)]/nrow(sim_data)
-data[, table(Delta)]/nrow(data)
+data2A[, table(Delta)]/nrow(data2A)
 sim_data[, summary(Time)]
-data[, summary(Time)]
+data2A[, summary(Time)]
 ```
 
 
 
 ```{r}
-ggarrange(plotEventData(sim_data[1:2000,], title = "Sim Data"), 
-          plotEventData(data[1:2000,], title = "Original Data"), ncol = 2)
+new_data1[, table(Delta)]/nrow(new_data1)
+data1[, table(Delta)]/nrow(data1)
+new_data1[, summary(Time)]
+data1[, summary(Time)]
+ggarrange(plotEventData(new_data1[1:2000,], title = "Sim Data"), 
+          plotEventData(data1[1:2000,], title = "Original Data"), ncol = 2)
 ```
+
+```{r}
+new_data2A[, table(Delta)]/nrow(new_data2A)
+data2A[, table(Delta)]/nrow(data2A)
+new_data2A[, summary(Time)]
+data2A[, summary(Time)]
+ggarrange(plotEventData(new_data2A[1:2000,], title = "Sim Data"), 
+          plotEventData(data2A[1:2000,], title = "Original Data"), ncol = 2)
+```
+
+```{r}
+new_data2L[, table(Delta)]/nrow(new_data2L)
+data2L[, table(Delta)]/nrow(data2L)
+new_data2L[, summary(Time)]
+data2L[, summary(Time)]
+ggarrange(plotEventData(new_data2L[1:2000,], title = "Sim Data"), 
+          plotEventData(data2L[1:2000,], title = "Original Data"), ncol = 2)
+```
+
+# Det virker som om det går galt her??????????????????
+
+```{r}
+new_data3[, table(Delta)]/nrow(new_data3)
+data3[, table(Delta)]/nrow(data3)
+new_data3[, summary(Time)]
+data3[, summary(Time)]
+ggarrange(plotEventData(new_data3[1:2000,], title = "Sim Data"), 
+          plotEventData(data3[1:2000,], title = "Original Data"), ncol = 2)
+```
+
 We still get some really large times...
-
-
-Debugging: check that the simulation functions work. Start with the cox and then simeventobj and simple scenarios. 
 
