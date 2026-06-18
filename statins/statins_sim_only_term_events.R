@@ -26,7 +26,7 @@ rownames(beta) <- c(
   "C", "D", "CVD")
 colnames(beta) <- c("C", "D", "CVD")
 
-#beta[1:10,1] <- c(0, 0.001, 0.021, 0.005, -0.008, -0.081, -0.008, 0.009, -0.023, 0.014)
+beta[1:10,1] <- c(-0.1484, 0.009, 4.006, 0.005, -0.008, -0.081, -0.008, 0.009, -0.023, 0.014)
 
 beta[1:10,2] <- c(-0.492, -0.008, 0.451, 0.116, 0.657, 0.577, 0.049, -0.093, 2.650, 0.121)
 
@@ -49,9 +49,9 @@ add_cov[[7]] <- function(N) rbinom(N, 1, 0.14)                                  
 add_cov[[8]] <- function(N) rpois(N, 5)                                                                       # base_drugs
 
 # Estimerede parametre, som vi har fået ved at fitte på event of interest og terminale events
-eta <- c(1, 0.0000412, 0.0001225)
-nu <- c(1, 1.197604, 1.014444)
-at_risk = function(events, covariates) return(c(0,1,1))
+eta <- c(0.0000009, 0.0000412, 0.0001225)
+nu <- c(0.0819379, 1.197604, 1.014444)
+at_risk = function(events, covariates) return(c(1,1,1))
 
 # Estimerede parametre, som vi har fået ved at fitte lm fits
 #eta <- rep(0.001,8)

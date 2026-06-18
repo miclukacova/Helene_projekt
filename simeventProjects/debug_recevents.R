@@ -31,8 +31,8 @@ cox_death <- survival::coxph(survival::Surv(Time, Delta == 1) ~ L0 + A0, data = 
 
 # Then simulate new data:
 cox_fits <- list("C" = cox_cens, "D" = cox_death) #, "L" = cox_Disease)
-list_old_vars <- list("L0" = data_obs$L0, "A0" = data_obs$A0)
-new_data <- simEventCox(N, cox_fits = cox_fits, list_old_vars = list_old_vars,
+old_vars <- data_obs[, c("L0", "A0")]
+new_data <- simEventCox(N, cox_fits = cox_fits, old_vars = old_vars,
                         term_events = c(1,2), n_event_max = c(1,1))
 
 # Fit new Cox models
@@ -78,8 +78,8 @@ cox_Disease <- survival::coxph(survival::Surv(tstart, tstop, Delta == 2) ~ L0 + 
 
 # Then simulate new data:
 cox_fits <- list("C" = cox_cens, "D" = cox_death, "L" = cox_Disease)
-list_old_vars <- list("L0" = data_obs$L0, "A0" = data_obs$A0)
-new_data <- simEventCox(N, cox_fits = cox_fits, list_old_vars = list_old_vars,
+old_vars <- data_obs[, c("L0", "A0")]
+new_data <- simEventCox(N, cox_fits = cox_fits, old_vars = old_vars,
                         term_events = c(1,2), n_event_max = c(1,1,1))
 new_data <- IntFormatData(new_data, N_cols = 6:8)
 
@@ -127,8 +127,8 @@ cox_L <- survival::coxph(survival::Surv(tstart, tstop, Delta == 3) ~ L0 + A, dat
 
 # Then simulate new data:
 cox_fits <- list("D" = cox_D, "A" = cox_A, "L" = cox_L)
-list_old_vars <- list("L0" = data_obs$L0)
-new_data <- simEventCox(N, cox_fits = cox_fits, list_old_vars = list_old_vars,
+old_vars <- data_obs[, c("L0")]
+new_data <- simEventCox(N, cox_fits = cox_fits, old_vars = old_vars,
                         term_events = c(1), n_event_max = c(1,1,1))
 new_data <- IntFormatData(new_data, N_cols = 5:7)
 
@@ -199,8 +199,8 @@ predict2.simevent <- function(obj, sim_data){
 # Then simulate new data:
 cox_fits <- list("C" = cox_cens, "D" = cox_death, "L" = cox_Disease)
 class(cox_fits) <- "simevent"
-list_old_vars <- list("L0" = data_obs$L0, "A0" = data_obs$A0)
-new_data <- simEventObj(N, obj = cox_fits, list_old_vars = list_old_vars, event_names = c("C", "D", "L"))
+old_vars <- data_obs[, c("L0", "A0")]
+new_data <- simEventObj(N, obj = cox_fits, old_vars = old_vars, event_names = c("C", "D", "L"))
 
 # Fit new Cox models
 cox_cens2 <- survival::coxph(survival::Surv(Time, Delta == 1) ~ L0 + A0, data = new_data)
@@ -231,6 +231,27 @@ data_obs[, table(Delta)]/nrow(data_obs)
 new_data[, summary(Time)]
 data_obs[, summary(Time)]
 
+# Do we systematically get too large of a maximal times?
+B <- 200
+max_times1 <- vector(length = B)
+max_times2 <- vector(length = B)
+for(i in 1:B){
+  print(i)
+  data_obs <- simCRdata(N)
+  cox_cens <- survival::coxph(survival::Surv(Time, Delta == 0) ~ L0 + A0, data = data_obs)
+  cox_death <- survival::coxph(survival::Surv(Time, Delta == 1) ~ L0 + A0, data = data_obs)
+  cox_Disease <- survival::coxph(survival::Surv(Time, Delta == 2) ~ L0 + A0, data = data_obs)
+  
+  # Then simulate new data:
+  cox_fits <- list("C" = cox_cens, "D" = cox_death, "L" = cox_Disease)
+  class(cox_fits) <- "simevent"
+  old_vars <- data_obs[, c("L0", "A0")]
+  new_data <- simEventObj(1000, obj = cox_fits, old_vars = old_vars, event_names = c("C", "D", "L"))
+  max_times1[i] <- new_data[,max(Time)]
+  max_times2[i] <- data_obs[,max(Time)]
+}
+# Apparently yes
+
 
 #-------------------------------------------------------------------------------
 # Disease setting
@@ -250,8 +271,8 @@ cox_Disease <- survival::coxph(survival::Surv(Time, Delta == 2) ~ L0 + A0, data 
 # Then simulate new data:
 cox_fits <- list("C" = cox_cens, "D" = cox_death, "L" = cox_Disease)
 class(cox_fits) <- "simevent"
-list_old_vars <- list("L0" = data_obs$L0, "A0" = data_obs$A0)
-new_data <- simEventObj(N, obj = cox_fits, list_old_vars = list_old_vars, event_names = c("C", "D", "L"))
+old_vars <- data_obs[, c("L0", "A0")]
+new_data <- simEventObj(N, obj = cox_fits, old_vars = old_vars, event_names = c("C", "D", "L"))
 
 # Fit new Cox models
 cox_cens2 <- survival::coxph(survival::Surv(Time, Delta == 1) ~ L0 + A0, data = new_data)
@@ -290,14 +311,14 @@ data2 <- data2[order(Time), .SD[2], by = ID]
 setkey(data2, ID)
 
 # Fit some Cox models
-cox_cens <- survival::coxph(survival::Surv(Time, Delta == 0) ~ L0 + A0, data = data2)
-cox_death <- survival::coxph(survival::Surv(Time, Delta == 1) ~ L0 + A0, data = data2)
+cox_cens <- survival::coxph(survival::Surv(Time, Delta == 0) ~ L0 + A0 + oldTime, data = data2)
+cox_death <- survival::coxph(survival::Surv(Time, Delta == 1) ~ L0 + A0 + oldTime, data = data2)
 
 # Then simulate new data:
 cox_fits <- list("C" = cox_cens, "D" = cox_death)
 class(cox_fits) <- "simevent"
-list_old_vars <- list("L0" = data_obs$L0, "A0" = data_obs$A0)
-new_data <- simEventObj(N, obj = cox_fits, list_old_vars = list_old_vars, event_names = c("C", "D"))
+old_vars <- data_obs[, c("L0", "A0", "oldTime")]
+new_data <- simEventObj(N, obj = cox_fits, old_vars = old_vars, event_names = c("C", "D"))
 
 # Fit new Cox models
 cox_cens2 <- survival::coxph(survival::Surv(Time, Delta == 1) ~ L0 + A0, data = new_data)
@@ -326,7 +347,7 @@ data2[, table(Delta)]/nrow(data2)
 new_data[, summary(Time)]
 data2[, summary(Time)]
 
-# Jeg har det som om at det her virker ? Der er noge tmed at vi ikke får præcis de samme covariater som dem vi simulere fra
+# Jeg har det som om at det her virker ? Der er noget med at vi ikke får præcis de samme covariater som dem vi simulere fra
 
 
 
