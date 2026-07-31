@@ -11,8 +11,8 @@ library(ggpubr)
 #-------------------------------------------------------------------------------
 # Simulating a dummy trial data set
 #-------------------------------------------------------------------------------
-# There are 8 processes: Censoring, Death, CVD
-n_cov <- 10
+# There are 11 processes: Censoring, Death, CVD
+n_cov <- 12
 n_proc <- 3
 
 # Regression coefficients
